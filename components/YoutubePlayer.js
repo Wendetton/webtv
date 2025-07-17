@@ -1,37 +1,47 @@
 import YouTube from "react-youtube";
 
 export default function YoutubePlayer({ videoId }) {
-  // Calcula altura ideal em 16:9
-  const aspect = 9 / 16;
-  // Você pode ajustar 'vw' e 'vh' conforme a tela (aqui prioriza largura total)
-  const width = "100vw";
-  const height = "calc(100vw * 0.5625)"; // 0.5625 = 9/16
-
+  // Estilo para preencher a tela mantendo proporção 16:9
   return (
     <div style={{
       position: "absolute",
       top: 0,
       left: 0,
-      width: width,
-      height: height,
+      width: "100vw",
+      height: "100vh",
       display: "flex",
       justifyContent: "center",
       alignItems: "center",
-      background: "#111"
+      background: "#111",
+      zIndex: 1,
     }}>
-      <YouTube
-        videoId={videoId}
-        opts={{
+      <div
+        style={{
           width: "100vw",
-          height: "calc(100vw * 0.5625)",
-          playerVars: {
-            autoplay: 1,
-            controls: 1,
-            modestbranding: 1,
-            rel: 0
-          }
+          height: "100vh",
+          maxWidth: "177.78vh",  // 16/9 = 1.7778... garante que nunca ultrapasse o limite vertical
+          maxHeight: "100vh",
         }}
-      />
+      >
+        <YouTube
+          videoId={videoId}
+          opts={{
+            width: "100%",
+            height: "100%",
+            playerVars: {
+              autoplay: 1,
+              controls: 1,
+              modestbranding: 1,
+              rel: 0
+            }
+          }}
+          style={{ width: "100%", height: "100%" }}
+        />
+      </div>
+    </div>
+  );
+}
+
     </div>
   );
 }
