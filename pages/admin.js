@@ -4,6 +4,7 @@ import { collection, addDoc, query, orderBy, limit, onSnapshot } from "firebase/
 import YoutubeConfig from "../components/YoutubeConfig";
 import PatientHistory from "../components/PatientHistory";
 import PatientCall from "../components/PatientCall";
+import ImageUploader from "../components/ImageUploader"; // Importação do novo componente
 
 export default function Admin() {
   // Estados do painel
@@ -26,6 +27,7 @@ export default function Admin() {
       <PatientCall />
       <PatientHistory history={history} loading={loading} />
       <YoutubeConfig />
+      <ImageUploader /> {/* <-- Adicione aqui o painel de upload e pré-visualização */}
     </div>
   );
 }
