@@ -3,12 +3,12 @@ import { getFirestore, serverTimestamp } from "firebase/firestore";
 
 // Substitua as credenciais abaixo pelas do seu projeto Firebase
 const firebaseConfig = {
-  apiKey: "SUA_API_KEY",
-  authDomain: "SEU_AUTH_DOMAIN",
-  projectId: "SEU_PROJECT_ID",
-  storageBucket: "SEU_STORAGE_BUCKET",
-  messagingSenderId: "SEU_MESSAGING_SENDER_ID",
-  appId: "SEU_APP_ID"
+  apiKey: "AIzaSyCYdjRgOv7A_OK2oMy5o3gGDxW-mn0ID54",
+  authDomain: "webtv-ee904.firebaseapp.com",
+  projectId: "webtv-ee904",
+  storageBucket: "webtv-ee904.firebasestorage.app",
+  messagingSenderId: "657754370553",
+  appId: "1:657754370553:web:2184cc792b71ef5e8b0d28"
 };
 
 const app = initializeApp(firebaseConfig);
