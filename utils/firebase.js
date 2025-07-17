@@ -1,5 +1,6 @@
 import { initializeApp } from "firebase/app";
 import { getFirestore, serverTimestamp } from "firebase/firestore";
+import { getStorage } from "firebase/storage";
 
 // Substitua as credenciais abaixo pelas do seu projeto Firebase
 const firebaseConfig = {
@@ -14,3 +15,4 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app);
 export { serverTimestamp };
+export const storage = getStorage(app);
