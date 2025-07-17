@@ -1,0 +1,25 @@
+body {
+  background: #f7f9fb;
+  margin: 0;
+}
+input, button {
+  border-radius: 6px;
+  border: 1px solid #ccc;
+}
+button {
+  cursor: pointer;
+  background: #1976d2;
+  color: #fff;
+  border: none;
+  transition: background 0.2s;
+}
+button:disabled {
+  background: #90caf9;
+}
+ul {
+  padding-left: 20px;
+}
+li {
+  margin-bottom: 6px;
+  font-size: 18px;
+}
