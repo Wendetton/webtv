@@ -16,12 +16,13 @@ export default function YoutubeConfig() {
     return () => unsub();
   }, []);
 
-  function extractVideoId(url) {
-    // Suporte para diferentes formatos de URL do YouTube
-    const regExp = /^.*((youtu.be\\/)|(v\\/)|(\\/u\\/\\w\\/)|(embed\\/)|(watch\\?))\\??v?=?([^#&?]*).*/;
-    const match = url.match(regExp);
-    return (match && match[7].length === 11) ? match[7] : null;
-  }
+function extractVideoId(url) {
+  // Suporte para diferentes formatos de URL do YouTube
+  const regExp = /^.*((youtu.be\/)|(v\/)|(\/u\/\w\/)|(embed\/)|(watch\?))\??v?=?([^#&?]*).*/;
+  const match = url.match(regExp);
+  return (match && match[7].length === 11) ? match[7] : null;
+}
+
 
   async function handleSave() {
     const videoId = extractVideoId(videoUrl);
