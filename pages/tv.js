@@ -35,12 +35,27 @@ export default function TV() {
   }, []);
 
   return (
-    <div style={{ background: "#222", width: "100vw", height: "100vh", position: "relative", overflow: "hidden" }}>
+    <div style={{
+      background: "#222",
+      width: "100vw",
+      height: "100vh",
+      position: "relative",
+      overflow: "hidden"
+    }}>
+      {/* Player de vídeo */}
       <YoutubePlayer videoId={videoId} />
+      
       {/* Histórico acima do banner */}
       <div style={{
-        position: "absolute", bottom: 100, width: "100%", textAlign: "center",
-        background: "#1976d2", color: "#fff", fontSize: 28, padding: "10px 0"
+        position: "absolute",
+        bottom: 100,
+        width: "100%",
+        textAlign: "center",
+        background: "#1976d2",
+        color: "#fff",
+        fontSize: 28,
+        padding: "10px 0",
+        zIndex: 2
       }}>
         {history.slice(1, 5).map((h, i) => (
           <span key={i} style={{ margin: "0 20px" }}>
@@ -48,10 +63,19 @@ export default function TV() {
           </span>
         ))}
       </div>
+
       {/* Banner do paciente chamado */}
       <div style={{
-        position: "absolute", bottom: 0, width: "100%", textAlign: "center",
-        background: "#1565c0", color: "#fff", fontSize: 36, padding: "25px 0", fontWeight: "bold"
+        position: "absolute",
+        bottom: 0,
+        width: "100%",
+        textAlign: "center",
+        background: "rgba(21, 101, 192, 0.92)", // translúcido
+        color: "#fff",
+        fontSize: 36,
+        padding: "25px 0",
+        fontWeight: "bold",
+        zIndex: 3
       }}>
         {history[0] && `${history[0].nome}, favor dirigir-se à sala ${history[0].sala}`}
       </div>
