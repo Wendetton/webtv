@@ -1,16 +1,12 @@
 
-/* ======= styles.css (FULL) — TV Caller UI =======
+/* ======= styles.css (UPDATED) — TV Caller UI =======
    Data: 2025-08-12
-   Este arquivo substitui o seu styles.css atual.
-   Se preferir, você pode mesclar manualmente; porém, esta versão já inclui
-   todo o estilo necessário para:
-   - Layout da TV sem sobrepor o vídeo
-   - Faixa inferior moderna
-   - Nome chamado centralizado
-   - Lista de “já chamados” em cards
+   Melhorias:
+   - Nome atual MUITO maior, centralizado, com luz piscante
+   - Chips de "já chamados" mais legíveis
+   - Mantém layout que não cobre o vídeo
 */
 
-/* Reset simples para consistência na TV */
 * { box-sizing: border-box; }
 html, body, #__next { height: 100%; }
 body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Arial, 'Apple Color Emoji', 'Segoe UI Emoji'; background:#0b1220; color:#fefefe; }
@@ -23,7 +19,7 @@ body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubunt
   --tv-muted: #93a0b3;
 }
 
-/* Container principal da tela da TV: vídeo em cima; painel embaixo */
+/* Layout geral */
 .tv-screen{
   min-height: 100vh;
   display: grid;
@@ -32,15 +28,14 @@ body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubunt
   overflow: hidden;
 }
 
-/* Área do vídeo */
 .tv-video-wrap{
   position: relative;
   width: 100%;
   height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
+  display: grid;
+  grid-template-columns: 1fr minmax(260px, 28vw);
+  gap: 16px;
+  padding: 16px;
 }
 .tv-video-inner{
   position: relative;
@@ -61,106 +56,107 @@ body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubunt
   display: block;
 }
 
-/* Painel inferior: nunca sobrepõe o vídeo */
+.tv-carousel{
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  color: var(--tv-muted);
+  font-size: clamp(14px, 2vw, 20px);
+}
+
+/* Painel inferior */
 .tv-footer{
   background: var(--tv-panel);
-  padding: 16px clamp(12px, 2vw, 32px);
+  padding: 10px clamp(12px, 2vw, 28px) 18px;
   border-top: 2px solid rgba(255,255,255,0.08);
   box-shadow: 0 -12px 24px rgba(0,0,0,0.35);
   z-index: 5;
 }
 
-/* Linha do paciente atual */
-.current-call{
-  display: grid;
-  grid-template-columns: 220px 1fr 220px;
-  align-items: center;
-  gap: clamp(8px, 1.6vw, 18px);
-  padding: clamp(12px, 2vw, 18px);
-  border-radius: 18px;
-  background: linear-gradient(180deg, rgba(68,178,231,0.18) 0%, rgba(68,178,231,0.06) 100%);
-  outline: 2px solid rgba(68,178,231,0.5);
-}
-.current-call .title{
-  font-size: clamp(18px, 2vw, 26px);
-  color: var(--tv-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  font-weight: 700;
-  white-space: nowrap;
-}
-.current-call .name{
-  text-align: center;
-  font-weight: 800;
-  font-size: clamp(28px, 5.5vw, 64px);
-  line-height: 1.1;
-  color: var(--tv-text);
-  text-shadow: 0 2px 12px rgba(0,0,0,0.35);
-  padding: 6px 10px;
-}
-
-@keyframes pulseOutline {
-  0% { box-shadow: 0 0 0 0 rgba(68,178,231,0.8); }
-  100% { box-shadow: 0 0 0 22px rgba(68,178,231,0); }
-}
-.current-call.pulse{ animation: pulseOutline 1.2s ease-out 2; }
-
-/* Lista dos últimos chamados */
+/* Chips dos já chamados */
 .called-list{
-  margin-top: clamp(10px, 1.5vw, 16px);
   display: grid;
   grid-auto-flow: column;
-  grid-auto-columns: minmax(220px, 1fr);
-  gap: clamp(8px, 1.4vw, 14px);
+  grid-auto-columns: minmax(260px, 1fr);
+  gap: clamp(10px, 1.5vw, 18px);
   overflow-x: auto;
+  padding: 8px 2px 14px;
   scrollbar-width: thin;
-  padding-bottom: 6px;
 }
-.called-card{
-  background: rgba(255,255,255,0.04);
-  border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 14px;
-  padding: 10px 12px;
+.called-chip{
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: clamp(16px, 2.2vw, 24px);
+  color: var(--tv-text);
+  white-space: nowrap;
+}
+
+/* Faixa do atual */
+.current-call{
+  margin-top: 6px;
+  position: relative;
+  padding: clamp(12px, 2.2vw, 20px);
+  border-radius: 18px;
+  background: radial-gradient(120% 120% at 50% 50%, rgba(68,178,231,0.18) 0%, rgba(68,178,231,0.06) 100%);
+  outline: 2px solid rgba(68,178,231,0.55);
   display: grid;
-  grid-template-rows: auto auto;
-  gap: 4px;
-  min-height: 62px;
+  place-items: center;
 }
-.called-card .label{
-  font-size: clamp(11px, 1.2vw, 13px);
+
+.current-call .label{
+  font-size: clamp(14px, 1.8vw, 18px);
   color: var(--tv-muted);
   text-transform: uppercase;
   letter-spacing: 0.08em;
-}
-.called-card .value{
-  font-size: clamp(14px, 1.8vw, 20px);
-  color: var(--tv-text);
-  font-weight: 700;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  font-weight: 800;
+  margin-bottom: 6px;
 }
 
-/* Carrossel de imagens (se houver na TV) — estilos suaves e seguros */
-.tv-carousel{
-  display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: minmax(280px, 36vw);
-  gap: 10px;
-  overflow-x: auto;
-  padding: 10px 0;
+/* NOME gigante e centralizado */
+#current-call-name{
+  text-align: center;
+  font-weight: 900;
+  font-size: clamp(42px, 7.2vw, 96px);
+  line-height: 1.05;
+  color: var(--tv-text);
+  text-shadow: 0 3px 18px rgba(0,0,0,0.55);
+  padding: 4px 8px;
 }
-.tv-carousel img{
-  width: 100%;
-  height: 36vh;
-  object-fit: cover;
-  border-radius: 12px;
-  border: 1px solid rgba(255,255,255,0.08);
+
+/* Sala abaixo do nome */
+.current-call .sub{
+  margin-top: 6px;
+  font-size: clamp(18px, 2.4vw, 28px);
+  font-weight: 700;
+  color: var(--tv-accent);
+}
+
+/* Efeitos chamativos: flash + glow pulsante */
+@keyframes flashGlow {
+  0%   { box-shadow: 0 0 0 0 rgba(68,178,231,0.9); }
+  70%  { box-shadow: 0 0 24px 16px rgba(68,178,231,0.0); }
+  100% { box-shadow: 0 0 0 0 rgba(68,178,231,0.0); }
+}
+@keyframes beacon {
+  0%, 100% { filter: drop-shadow(0 0 0 rgba(68,178,231,0)); }
+  50%      { filter: drop-shadow(0 0 18px rgba(68,178,231,0.9)); }
+}
+.current-call.flash{
+  animation: flashGlow 1.1s ease-out 2;
+}
+.current-call.flash #current-call-name{
+  animation: beacon 1.1s ease-out 2;
 }
 
 /* Utilitários */
-.hidden { display: none !important; }
 .flex { display: flex; }
 .center { align-items: center; justify-content: center; }
-
-/* ======= Fim do styles.css ======= */
+.muted { color: var(--tv-muted); }
