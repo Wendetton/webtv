@@ -1,11 +1,6 @@
 
-/* ======= pages/tv.js (UPDATED) — Bigger name + flashing + ducking via tv-ducking.js =======
+/* ======= pages/tv.js (FINAL FIX) — Sem cortes + controles do YouTube visíveis =======
    Data: 2025-08-12
-   Mudanças principais:
-   - O elemento do nome atual tem id="current-call-name" (o script /public/tv-ducking.js observa isso).
-   - Ao chegar um novo chamado (coleção 'calls'), atualiza o nome, ativa flash visual e
-     tenta chamar window.tvAnnounce(nome) (se o script estiver carregado), garantindo ducking.
-   - Exibe 'Sala X' logo abaixo do nome (maior e visível).
 */
 
 import Head from 'next/head';
@@ -16,23 +11,12 @@ import { collection, query, orderBy, limit, onSnapshot } from 'firebase/firestor
 import YoutubePlayer from '../components/YoutubePlayer';
 import Carousel from '../components/Carousel';
 
-const BANNER_HEIGHT = 180;
-
 export default function TV(){
   const [history, setHistory] = useState([]);
   const [videoId, setVideoId] = useState('');
-  const [windowHeight, setWindowHeight] = useState(800);
-
   const [currentName, setCurrentName] = useState('—');
   const [currentSala, setCurrentSala] = useState('');
   const lastAnnouncedRef = useRef('');
-
-  useEffect(() => {
-    function handleResize(){ setWindowHeight(window.innerHeight || 800); }
-    handleResize();
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
 
   useEffect(() => {
     // calls: pega 5 mais recentes
@@ -58,29 +42,24 @@ export default function TV(){
     return () => { unsubCalls(); unsubVid(); };
   }, []);
 
-  // Quando currentName muda: aplica flash e tenta anunciar (ducking via tv-ducking.js)
+  // Quando currentName muda: flash + tentativa de anunciar via tv-ducking.js
   useEffect(() => {
     if (!currentName || currentName === '—') return;
-    const container = document.querySelector('.current-call');
-    if (container) {
-      container.classList.remove('flash');
-      // força reflow
-      void container.offsetWidth;
-      container.classList.add('flash');
+    const box = document.querySelector('.current-call');
+    if (box) {
+      box.classList.remove('flash');
+      void box.offsetWidth;
+      box.classList.add('flash');
     }
     if (typeof window !== 'undefined') {
       if (lastAnnouncedRef.current !== currentName) {
         lastAnnouncedRef.current = currentName;
-        // Se o script tv-ducking.js estiver carregado, ele expõe window.tvAnnounce
         if (typeof window.tvAnnounce === 'function') {
           try { window.tvAnnounce(currentName); } catch {}
         }
       }
     }
   }, [currentName]);
-
-  const videoAreaHeight = Math.max(260, windowHeight - BANNER_HEIGHT);
-  const videoWidth = Math.floor((videoAreaHeight * 16) / 9);
 
   return (
     <div className="tv-screen">
@@ -89,28 +68,24 @@ export default function TV(){
         <meta name="viewport" content="width=device-width, initial-scale=1" />
       </Head>
 
-      <div className="tv-video-wrap" style={{ height: videoAreaHeight }}>
+      {/* TOPO: vídeo + carrossel */}
+      <div className="tv-video-wrap">
         <div className="tv-video-inner">
           {videoId ? (
-            <YoutubePlayer
-              videoId={videoId}
-              width={videoWidth}
-              height={videoAreaHeight}
-            />
+            <YoutubePlayer videoId={videoId} />
           ) : (
             <div className="flex center" style={{ width:'100%', height:'100%', opacity:0.6 }}>
               <div>Configure o vídeo no painel Admin…</div>
             </div>
           )}
         </div>
-
         <div className="tv-carousel">
           <Carousel />
         </div>
       </div>
 
-      <div className="tv-footer" style={{ height: BANNER_HEIGHT }}>
-        {/* Já chamados */}
+      {/* RODAPÉ: histórico + atual (sem altura fixa) */}
+      <div className="tv-footer">
         <div className="called-list">
           {history.slice(1).length ? (
             history.slice(1).map((h, i) => (
@@ -123,7 +98,6 @@ export default function TV(){
           )}
         </div>
 
-        {/* Atual */}
         <div className="current-call">
           <div className="label">Chamando agora</div>
           <div id="current-call-name">{currentName || '—'}</div>
