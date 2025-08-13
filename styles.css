@@ -1,53 +1,38 @@
-body {
-  background: #f7f9fb;
-  margin: 0;
-}
-input, button {
-  border-radius: 6px;
-  border: 1px solid #ccc;
-}
-button {
-  cursor: pointer;
-  background: #1976d2;
-  color: #fff;
-  border: none;
-  transition: background 0.2s;
-}
-button:disabled {
-  background: #90caf9;
-}
-ul {
-  padding-left: 20px;
-}
-li {
-  margin-bottom: 6px;
-  font-size: 18px;
-}
 
-/* === TV Layout & Accessibility Enhancements (Aug 12, 2025) ===
-   Drop this file into your project (e.g., /styles/tv-enhancer.css)
-   and import it on the /tv page or in _app.(js|tsx).
+/* ======= styles.css (FULL) — TV Caller UI =======
+   Data: 2025-08-12
+   Este arquivo substitui o seu styles.css atual.
+   Se preferir, você pode mesclar manualmente; porém, esta versão já inclui
+   todo o estilo necessário para:
+   - Layout da TV sem sobrepor o vídeo
+   - Faixa inferior moderna
+   - Nome chamado centralizado
+   - Lista de “já chamados” em cards
 */
+
+/* Reset simples para consistência na TV */
+* { box-sizing: border-box; }
+html, body, #__next { height: 100%; }
+body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Arial, 'Apple Color Emoji', 'Segoe UI Emoji'; background:#0b1220; color:#fefefe; }
 
 :root{
   --tv-bg: #0b1220;
   --tv-panel: #0e1626;
-  --tv-accent: #44b2e7; /* sua cor brand secundária */
+  --tv-accent: #44b2e7;
   --tv-text: #fefefe;
   --tv-muted: #93a0b3;
 }
 
-/* Container principal da tela da TV: ocupa a viewport inteira, com grid
-   para impedir que o painel inferior cubra o vídeo. */
+/* Container principal da tela da TV: vídeo em cima; painel embaixo */
 .tv-screen{
   min-height: 100vh;
   display: grid;
-  grid-template-rows: 1fr auto; /* vídeo se adapta, painel ocupa altura fixa */
+  grid-template-rows: 1fr auto;
   background: var(--tv-bg);
   overflow: hidden;
 }
 
-/* Área do vídeo: mantém 16:9 e recorta com elegância sem passar por trás do painel */
+/* Área do vídeo */
 .tv-video-wrap{
   position: relative;
   width: 100%;
@@ -55,10 +40,8 @@ li {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding-bottom: 0; /* não usamos faixa sobreposta */
   overflow: hidden;
 }
-
 .tv-video-inner{
   position: relative;
   width: 100%;
@@ -70,7 +53,6 @@ li {
   align-items: center;
   justify-content: center;
 }
-
 .tv-video-inner iframe,
 .tv-video-inner video{
   width: 100%;
@@ -79,8 +61,7 @@ li {
   display: block;
 }
 
-/* Painel inferior (pacientes): NUNCA cobre o vídeo.
-   Altura fixa, responsivo, com boa legibilidade. */
+/* Painel inferior: nunca sobrepõe o vídeo */
 .tv-footer{
   background: var(--tv-panel);
   padding: 16px clamp(12px, 2vw, 32px);
@@ -89,10 +70,10 @@ li {
   z-index: 5;
 }
 
-/* Linha com o paciente atual em destaque */
+/* Linha do paciente atual */
 .current-call{
   display: grid;
-  grid-template-columns: 220px 1fr 220px; /* setas/ícones laterais para dar equilíbrio visual */
+  grid-template-columns: 220px 1fr 220px;
   align-items: center;
   gap: clamp(8px, 1.6vw, 18px);
   padding: clamp(12px, 2vw, 18px);
@@ -100,8 +81,6 @@ li {
   background: linear-gradient(180deg, rgba(68,178,231,0.18) 0%, rgba(68,178,231,0.06) 100%);
   outline: 2px solid rgba(68,178,231,0.5);
 }
-
-/* Título "Chamando agora" */
 .current-call .title{
   font-size: clamp(18px, 2vw, 26px);
   color: var(--tv-muted);
@@ -110,8 +89,6 @@ li {
   font-weight: 700;
   white-space: nowrap;
 }
-
-/* NOME do paciente em destaque: CENTRALIZADO verticalmente no bloco */
 .current-call .name{
   text-align: center;
   font-weight: 800;
@@ -122,16 +99,13 @@ li {
   padding: 6px 10px;
 }
 
-/* Efeito de “pulsar” sutil quando muda o nome */
 @keyframes pulseOutline {
   0% { box-shadow: 0 0 0 0 rgba(68,178,231,0.8); }
   100% { box-shadow: 0 0 0 22px rgba(68,178,231,0); }
 }
-.current-call.pulse{
-  animation: pulseOutline 1.2s ease-out 2;
-}
+.current-call.pulse{ animation: pulseOutline 1.2s ease-out 2; }
 
-/* Lista dos últimos chamados (cards moderninhos) */
+/* Lista dos últimos chamados */
 .called-list{
   margin-top: clamp(10px, 1.5vw, 16px);
   display: grid;
@@ -142,7 +116,6 @@ li {
   scrollbar-width: thin;
   padding-bottom: 6px;
 }
-
 .called-card{
   background: rgba(255,255,255,0.04);
   border: 1px solid rgba(255,255,255,0.08);
@@ -153,14 +126,12 @@ li {
   gap: 4px;
   min-height: 62px;
 }
-
 .called-card .label{
   font-size: clamp(11px, 1.2vw, 13px);
   color: var(--tv-muted);
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
-
 .called-card .value{
   font-size: clamp(14px, 1.8vw, 20px);
   color: var(--tv-text);
@@ -170,7 +141,26 @@ li {
   text-overflow: ellipsis;
 }
 
+/* Carrossel de imagens (se houver na TV) — estilos suaves e seguros */
+.tv-carousel{
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(280px, 36vw);
+  gap: 10px;
+  overflow-x: auto;
+  padding: 10px 0;
+}
+.tv-carousel img{
+  width: 100%;
+  height: 36vh;
+  object-fit: cover;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.08);
+}
+
 /* Utilitários */
 .hidden { display: none !important; }
 .flex { display: flex; }
 .center { align-items: center; justify-content: center; }
+
+/* ======= Fim do styles.css ======= */
