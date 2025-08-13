@@ -1,6 +1,8 @@
 
-/* ======= pages/tv.js (FINAL FIX) — Sem cortes + controles do YouTube visíveis =======
+/* ======= pages/tv.js — Mostrar só 2 no histórico =======
    Data: 2025-08-12
+   Ajuste: o histórico (linha de chips) mostra apenas os DOIS últimos pacientes
+   já chamados (excluindo o atual).
 */
 
 import Head from 'next/head';
@@ -19,8 +21,8 @@ export default function TV(){
   const lastAnnouncedRef = useRef('');
 
   useEffect(() => {
-    // calls: pega 5 mais recentes
-    const q = query(collection(db, 'calls'), orderBy('timestamp', 'desc'), limit(5));
+    // Pega APENAS 3: atual (index 0) + dois últimos (1 e 2)
+    const q = query(collection(db, 'calls'), orderBy('timestamp', 'desc'), limit(3));
     const unsubCalls = onSnapshot(q, (snap) => {
       const list = snap.docs.map((d) => d.data());
       setHistory(list);
@@ -31,7 +33,6 @@ export default function TV(){
       }
     });
 
-    // config: vídeo
     const unsubVid = onSnapshot(collection(db, 'config'), (snap) => {
       if (!snap.empty) {
         const data = snap.docs[0].data();
@@ -84,11 +85,11 @@ export default function TV(){
         </div>
       </div>
 
-      {/* RODAPÉ: histórico + atual (sem altura fixa) */}
+      {/* RODAPÉ: histórico (apenas DOIS últimos) + atual */}
       <div className="tv-footer">
         <div className="called-list">
-          {history.slice(1).length ? (
-            history.slice(1).map((h, i) => (
+          {history.slice(1, 3).length ? (
+            history.slice(1, 3).map((h, i) => (
               <span key={i} className="called-chip">
                 {h.nome} – Sala {h.sala}
               </span>
