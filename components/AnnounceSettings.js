@@ -1,4 +1,3 @@
-// components/AnnounceSettings.js
 import { useEffect, useState } from "react";
 import { db } from "../utils/firebase";
 import {
@@ -9,58 +8,58 @@ import {
   getDocs,
   addDoc,
   limit,
+  query,
   serverTimestamp,
 } from "firebase/firestore";
 
 export default function AnnounceSettings() {
-  // estados
   const [announceMode, setAnnounceMode] = useState("auto"); // auto | fully | web | beep
   const [announceTemplate, setAnnounceTemplate] = useState(
     "Atenção: paciente {{nome}}. Dirija-se à sala {{salaTxt}}."
   );
-  const [duckVolume, setDuckVolume] = useState(20); // 0..100
-  const [restoreVolume, setRestoreVolume] = useState(60); // 0..100
-  const [leadMs, setLeadMs] = useState(450); // ms
+  const [duckVolume, setDuckVolume] = useState(20);
+  const [restoreVolume, setRestoreVolume] = useState(60);
+  const [leadMs, setLeadMs] = useState(450);
   const [accentColor, setAccentColor] = useState("#44b2e7");
 
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [loadError, setLoadError] = useState("");
 
-  // teste
   const [testName, setTestName] = useState("");
   const [testRoom, setTestRoom] = useState("");
 
-  // carrega config de config/main ou do 1º doc de config
   useEffect(() => {
     async function load() {
       try {
-        const mainRef = doc(db, "config", "main");
-        const snap = await getDoc(mainRef);
-
+        setLoadError("");
         let data = null;
-        if (snap.exists()) {
-          data = snap.data();
-        } else {
-          const col = collection(db, "config");
-          const snaps = await getDocs(limit(col, 1));
-          snaps.forEach((d) => {
-            data = d.data();
-          });
+
+        // tenta doc fixo "main"
+        const mainRef = doc(db, "config", "main");
+        const mainSnap = await getDoc(mainRef);
+        if (mainSnap.exists()) {
+          data = mainSnap.data();
+        }
+
+        // se não houver, pega o primeiro da coleção
+        if (!data) {
+          const colRef = collection(db, "config");
+          const q = query(colRef, limit(1));
+          const qs = await getDocs(q);
+          qs.forEach((d) => { data = d.data(); });
         }
 
         if (data) {
           if (data.announceMode) setAnnounceMode(String(data.announceMode));
-          if (data.announceTemplate)
-            setAnnounceTemplate(String(data.announceTemplate));
-          if (Number.isFinite(data.duckVolume))
-            setDuckVolume(Number(data.duckVolume));
-          if (Number.isFinite(data.restoreVolume))
-            setRestoreVolume(Number(data.restoreVolume));
+          if (data.announceTemplate) setAnnounceTemplate(String(data.announceTemplate));
+          if (Number.isFinite(data.duckVolume)) setDuckVolume(Number(data.duckVolume));
+          if (Number.isFinite(data.restoreVolume)) setRestoreVolume(Number(data.restoreVolume));
           if (Number.isFinite(data.leadMs)) setLeadMs(Number(data.leadMs));
           if (data.accentColor) setAccentColor(String(data.accentColor));
         }
-      } catch {
-        // silencia erro de leitura
+      } catch (err):
+        setLoadError("Não foi possível carregar as configurações (verifique as permissões do Firestore).");
       }
     }
     load();
@@ -71,23 +70,19 @@ export default function AnnounceSettings() {
     setSaved(false);
     try {
       const ref = doc(db, "config", "main");
-      await setDoc(
-        ref,
-        {
-          announceMode,
-          announceTemplate,
-          duckVolume: Number(duckVolume),
-          restoreVolume: Number(restoreVolume),
-          leadMs: Number(leadMs),
-          accentColor,
-          updatedAt: serverTimestamp(),
-        },
-        { merge: true }
-      );
+      await setDoc(ref, {
+        announceMode,
+        announceTemplate,
+        duckVolume: Number(duckVolume),
+        restoreVolume: Number(restoreVolume),
+        leadMs: Number(leadMs),
+        accentColor,
+        updatedAt: serverTimestamp(),
+      }, { merge: true });
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
-    } catch {
-      // ex: sem permissão
+    } catch (e) {
+      alert("Erro ao salvar. Verifique se o Firestore permite escrita no doc config/main.");
     } finally {
       setSaving(false);
     }
@@ -104,14 +99,13 @@ export default function AnnounceSettings() {
         timestamp: serverTimestamp(),
         test: true,
       });
-      setTestName("");
-      setTestRoom("");
-    } catch {
-      // silencia
+      setTestName(""); setTestRoom("");
+    } catch (e) {
+      alert("Erro ao criar teste. Verifique as permissões de escrita em 'calls'.");
     }
   }
 
-  // estilos simples inline
+  // estilos
   const wrap = { marginTop: 24, padding: 16, border: "1px solid rgba(255,255,255,0.12)", borderRadius: 12 };
   const title = { fontSize: 18, fontWeight: 800, marginBottom: 12 };
   const row = { display: "grid", gap: 12, gridTemplateColumns: "1fr", marginBottom: 14 };
@@ -125,15 +119,12 @@ export default function AnnounceSettings() {
   return (
     <section style={wrap}>
       <div style={title}>Configurações do anúncio</div>
+      {loadError && <div style={{...small, color:"#f87171"}}>{loadError}</div>}
 
       {/* Modo */}
       <div style={row}>
         <label style={label}>Modo do anúncio</label>
-        <select
-          value={announceMode}
-          onChange={(e) => setAnnounceMode(e.target.value)}
-          style={input}
-        >
+        <select value={announceMode} onChange={(e) => setAnnounceMode(e.target.value)} style={input}>
           <option value="auto">Automático (Fully → Voz do navegador → Beep)</option>
           <option value="fully">Fully TTS (recomendado no Fire TV)</option>
           <option value="web">Voz do navegador</option>
@@ -147,12 +138,7 @@ export default function AnnounceSettings() {
       {/* Template */}
       <div style={row}>
         <label style={label}>Frase do anúncio</label>
-        <textarea
-          rows={2}
-          value={announceTemplate}
-          style={{ ...input, resize: "vertical" }}
-          onChange={(e) => setAnnounceTemplate(e.target.value)}
-        />
+        <textarea rows={2} value={announceTemplate} style={{ ...input, resize: "vertical" }} onChange={(e) => setAnnounceTemplate(e.target.value)} />
         <div style={small}>
           Use <code>{'{{nome}}'}</code>, <code>{'{{sala}}'}</code> e <code>{'{{salaTxt}}'}</code>.{" "}
           Ex.: Atenção: paciente <b>{'{{nome}}'}</b>. Dirija-se à sala <b>{'{{sala}}'}</b>.
@@ -162,53 +148,27 @@ export default function AnnounceSettings() {
       {/* Volumes */}
       <div style={row}>
         <label style={label}>Volume durante anúncio (duck)</label>
-        <input
-          type="number"
-          min={0}
-          max={100}
-          value={duckVolume}
-          onChange={(e) => setDuckVolume(e.target.value)}
-          style={input}
-        />
+        <input type="number" min={0} max={100} value={duckVolume} onChange={(e) => setDuckVolume(e.target.value)} style={input} />
         <div style={small}>0 a 100. Valor menor = YouTube mais baixo durante o anúncio.</div>
       </div>
 
       <div style={row}>
         <label style={label}>Volume normal (restore)</label>
-        <input
-          type="number"
-          min={0}
-          max={100}
-          value={restoreVolume}
-          onChange={(e) => setRestoreVolume(e.target.value)}
-          style={input}
-        />
+        <input type="number" min={0} max={100} value={restoreVolume} onChange={(e) => setRestoreVolume(e.target.value)} style={input} />
         <div style={small}>0 a 100. Volume a ser restaurado após o anúncio.</div>
       </div>
 
       {/* Antecedência */}
       <div style={row}>
         <label style={label}>Antecedência (ms) antes do anúncio</label>
-        <input
-          type="number"
-          min={0}
-          max={3000}
-          value={leadMs}
-          onChange={(e) => setLeadMs(e.target.value)}
-          style={input}
-        />
+        <input type="number" min={0} max={3000} value={leadMs} onChange={(e) => setLeadMs(e.target.value)} style={input} />
         <div style={small}>Tempo (em milissegundos) que o YouTube fica baixo antes de iniciar a fala.</div>
       </div>
 
       {/* Cor */}
       <div style={row}>
         <label style={label}>Cor do destaque (nome piscando)</label>
-        <input
-          type="color"
-          value={accentColor}
-          onChange={(e) => setAccentColor(e.target.value)}
-          style={{ ...input, padding: 0, height: 44 }}
-        />
+        <input type="color" value={accentColor} onChange={(e) => setAccentColor(e.target.value)} style={{ ...input, padding: 0, height: 44 }} />
       </div>
 
       {/* Ações */}
@@ -224,21 +184,11 @@ export default function AnnounceSettings() {
       {/* Teste */}
       <div style={title}>Testar anúncio (não entra no histórico)</div>
       <div style={{ display: "grid", gap: 10, gridTemplateColumns: "2fr 1fr auto" }}>
-        <input
-          placeholder="Nome do paciente"
-          value={testName}
-          onChange={(e) => setTestName(e.target.value)}
-          style={input}
-        />
-        <input
-          placeholder="Sala"
-          value={testRoom}
-          onChange={(e) => setTestRoom(e.target.value)}
-          style={input}
-        />
+        <input placeholder="Nome do paciente" value={testName} onChange={(e) => setTestName(e.target.value)} style={input} />
+        <input placeholder="Sala" value={testRoom} onChange={(e) => setTestRoom(e.target.value)} style={input} />
         <button onClick={testAnnounce} style={btnTest}>Testar</button>
       </div>
-      <div style={small}>A TV fala, mas esse registro vem marcado como <code>test: true</code>.</div>
+      <div style={small}>A TV fala, mas esse registro vem marcado como <code>test: true</code> (a TV ignora no histórico).</div>
     </section>
   );
 }
