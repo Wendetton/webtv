@@ -6,7 +6,6 @@ import { collection, query, orderBy, limit, onSnapshot, doc } from 'firebase/fir
 import YoutubePlayer from '../components/YoutubePlayer';
 import Carousel from '../components/Carousel';
 
-// util: aplica cor de destaque no CSS
 function applyAccent(color){
   try { document.documentElement.style.setProperty('--tv-accent', color || '#44b2e7'); } catch {}
 }
@@ -16,8 +15,6 @@ export default function TV(){
   const [videoId, setVideoId] = useState('');
   const [currentName, setCurrentName] = useState('—');
   const [currentSala, setCurrentSala] = useState('');
-  const [configSource, setConfigSource] = useState('');
-
   const lastAnnouncedRef = useRef('');
 
   // Assina chamadas (pega 5, filtra test)
@@ -25,7 +22,7 @@ export default function TV(){
     const qCalls = query(collection(db, 'calls'), orderBy('timestamp', 'desc'), limit(5));
     const unsub = onSnapshot(qCalls, (snap) => {
       const raw = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      const list = raw.filter(x => !x.test); // ignora testes
+      const list = raw.filter(x => !x.test);
       setHistory(list);
       if (list.length) {
         const { nome, sala } = list[0] || {};
@@ -36,28 +33,23 @@ export default function TV(){
     return () => unsub();
   }, []);
 
-  // Assina config: tenta doc config/main; se não existir, usa o 1º doc da coleção
+  // Assina configurações de anúncio (config/main -> fallback primeiro doc)
   useEffect(() => {
     let usedMain = false;
     const unsubMain = onSnapshot(doc(db,'config','main'), (snap) => {
       if (snap.exists()) {
         usedMain = true;
-        setConfigSource('config/main');
         applyConfig(snap.data());
       }
     });
-    const unsubCol = onSnapshot(collection(db,'config'), (snap) => {
+    const unsubColForSettings = onSnapshot(collection(db,'config'), (snap) => {
       if (usedMain) return;
       if (!snap.empty) {
-        setConfigSource('config/[first]');
         applyConfig(snap.docs[0].data());
       }
     });
     function applyConfig(data){
       if (!data) return;
-      // vídeoId (se seu admin salvar aqui)
-      if (data.videoId) setVideoId(String(data.videoId));
-      // modo/volumes/template/cor
       const cfg = {
         announceMode: data.announceMode || 'auto',
         announceTemplate: data.announceTemplate || 'Atenção: paciente {{nome}}. Dirija-se à sala {{salaTxt}}.',
@@ -67,15 +59,29 @@ export default function TV(){
         accentColor: data.accentColor || '#44b2e7',
       };
       applyAccent(cfg.accentColor);
-      // publica global para tv-ducking.js
       if (typeof window !== 'undefined') {
         window.tvConfig = { ...cfg };
       }
     }
-    return () => { unsubMain(); unsubCol(); };
+    return () => { unsubMain(); unsubColForSettings(); };
   }, []);
 
-  // Quando o nome muda, solicita anúncio ao script (respeita config)
+  // Assina o videoId de forma independente (procura em QUALQUER doc da coleção 'config')
+  useEffect(() => {
+    const unsubVid = onSnapshot(collection(db,'config'), (snap) => {
+      let vid = '';
+      snap.forEach(docSnap => {
+        const data = docSnap.data();
+        if (!vid && data && data.videoId) {
+          vid = String(data.videoId);
+        }
+      });
+      setVideoId(vid); // se não achar, fica ''
+    });
+    return () => unsubVid();
+  }, []);
+
+  // Quando o nome muda, solicita anúncio ao script
   useEffect(() => {
     if (!currentName || currentName === '—') return;
     const row = document.querySelector('.current-call');
@@ -113,7 +119,6 @@ export default function TV(){
       </div>
 
       <div className="tv-footer">
-        {/* 2 últimos (exclui atual) */}
         <div className="called-list">
           {history.slice(1, 3).length ? (
             history.slice(1, 3).map((h, i) => (
