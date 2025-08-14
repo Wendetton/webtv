@@ -29,6 +29,7 @@ export default function Admin() {
       <PatientHistory history={history} loading={loading} />
       <YoutubeConfig />
       <ImageUploader /> {/* <-- Adicione aqui o painel de upload e pré-visualização */}
+      <AnnounceSettings />
     </div>
   );
 }
