@@ -1,191 +1,258 @@
-/* components/AnnounceSettings.js — Painel de configurações do anúncio (para usar dentro de /admin)
-   - Salva em Firestore: doc('config','main')
-   - Campos: announceMode, voiceTemplate, duckVolume, restoreVolume, leadMs, highlightColor
-   - Botão "Testar anúncio": cria um doc em 'calls' com {test:true} (TV fala mas não mostra no histórico)
-*/
-import { useEffect, useState } from 'react';
-import { db } from '../utils/firebase';
+// components/AnnounceSettings.js
+// Configurações do anúncio (modo, frase, volumes, atraso) + teste
+import { useEffect, useState } from "react";
+import { db } from "../utils/firebase";
 import {
-  doc, getDoc, setDoc, updateDoc, collection, getDocs, addDoc, serverTimestamp
-} from 'firebase/firestore';
+  doc,
+  getDoc,
+  setDoc,
+  collection,
+  addDoc,
+  serverTimestamp,
+  getDocs,
+  limit,
+  query,
+} from "firebase/firestore";
 
-const DEFAULTS = {
-  announceMode: 'auto', // 'auto' | 'fully' | 'web' | 'beep'
-  voiceTemplate: 'Atenção: paciente {{nome}}. Por favor, dirija-se ao consultório{{salaTxt}}.',
-  duckVolume: 20,
-  restoreVolume: 60,
-  leadMs: 450,
-  highlightColor: '#44b2e7',
+const container = {
+  marginTop: 24,
+  padding: 16,
+  borderRadius: 12,
+  border: "1px solid rgba(255,255,255,0.12)",
+  background: "rgba(255,255,255,0.03)",
 };
 
-export default function AnnounceSettings(){
+const row = { display: "grid", gridTemplateColumns: "220px 1fr", gap: 12, alignItems: "center", margin: "10px 0" };
+const label = { fontWeight: 700 };
+const input = {
+  width: "100%",
+  padding: "8px 10px",
+  borderRadius: 8,
+  border: "1px solid rgba(255,255,255,0.18)",
+  background: "rgba(0,0,0,0.2)",
+  color: "#fff",
+};
+const select = input;
+const small = { color: "#93a0b3", fontSize: 12 };
+const btnRow = { display: "flex", gap: 10, alignItems: "center", marginTop: 12 };
+const btnPrimary = {
+  cursor: "pointer",
+  padding: "10px 14px",
+  borderRadius: 10,
+  border: "1px solid rgba(255,255,255,0.18)",
+  background: "linear-gradient(180deg, rgba(68,178,231,0.25), rgba(68,178,231,0.15))",
+  color: "#fff",
+  fontWeight: 800,
+};
+const btnSecondary = {
+  cursor: "pointer",
+  padding: "10px 14px",
+  borderRadius: 10,
+  border: "1px solid rgba(255,255,255,0.18)",
+  background: "rgba(255,255,255,0.06)",
+  color: "#fff",
+  fontWeight: 800,
+};
+
+const MODES = [
+  { value: "auto", label: "Automático (Fully → Web → Beep)" },
+  { value: "fully", label: "Forçar Fully TTS" },
+  { value: "web", label: "Forçar Voz do navegador" },
+  { value: "beep", label: "Forçar Beep" },
+];
+
+export default function AnnounceSettings() {
   const [loading, setLoading] = useState(true);
-  const [cfgId, setCfgId] = useState('main');
-  const [form, setForm] = useState(DEFAULTS);
-  const [testName, setTestName] = useState('Fulano de Tal');
-  const [testSala, setTestSala] = useState('1');
   const [saving, setSaving] = useState(false);
-  const [testing, setTesting] = useState(false);
   const [saved, setSaved] = useState(false);
 
+  // valores
+  const [announceMode, setAnnounceMode] = useState("auto");
+  const [announceTemplate, setAnnounceTemplate] = useState("Atenção: paciente {{nome}}. Por favor, dirija-se ao consultório{{salaTxt}}.");
+  const [duckVolume, setDuckVolume] = useState(20);    // 0..100
+  const [restoreVolume, setRestoreVolume] = useState(60); // 0..100
+  const [leadMs, setLeadMs] = useState(450); // antes de falar
+  const [accentColor, setAccentColor] = useState("#44b2e7");
+
+  // teste
+  const [testNome, setTestNome] = useState("");
+  const [testSala, setTestSala] = useState("");
+
   useEffect(() => {
-    async function boot(){
-      setLoading(true);
-      // tenta 'config/main'; se não existir, usa o primeiro doc de 'config'
-      let ref = doc(db, 'config', 'main');
-      let snap = await getDoc(ref);
-      if (!snap.exists()) {
-        const snapAll = await getDocs(collection(db, 'config'));
-        if (!snapAll.empty) {
-          ref = doc(db, 'config', snapAll.docs[0].id);
-          snap = await getDoc(ref);
-          setCfgId(ref.id);
-        } else {
-          // cria config inicial
-          await setDoc(ref, DEFAULTS, { merge: true });
-          snap = await getDoc(ref);
-          setCfgId('main');
+    async function load() {
+      try {
+        // tenta /config/main
+        const mainRef = doc(db, "config", "main");
+        const snap = await getDoc(mainRef);
+
+        let data = snap.exists() ? snap.data() : null;
+        if (!data) {
+          // fallback: primeiro doc da coleção config
+          const q = query(collection(db, "config"), limit(1));
+          const qs = await getDocs(q);
+          if (!qs.empty) data = qs.docs[0].data();
         }
-      } else {
-        setCfgId('main');
+
+        if (data) {
+          if (data.announceMode) setAnnounceMode(String(data.announceMode));
+          if (data.announceTemplate) setAnnounceTemplate(String(data.announceTemplate));
+          if (Number.isFinite(data.duckVolume)) setDuckVolume(Number(data.duckVolume));
+          if (Number.isFinite(data.restoreVolume)) setRestoreVolume(Number(data.restoreVolume));
+          if (Number.isFinite(data.leadMs)) setLeadMs(Number(data.leadMs));
+          if (data.accentColor) setAccentColor(String(data.accentColor));
+        }
+      } catch (e) {
+        console.error("Erro ao carregar config:", e);
+      } finally {
+        setLoading(false);
       }
-      const data = snap.data() || {};
-      setForm({ ...DEFAULTS, ...data });
-      setLoading(false);
     }
-    boot();
+    load();
   }, []);
 
-  async function save(){
-    setSaving(true);
+  async function save() {
+    setSaving(true); setSaved(false);
     try {
-      const ref = doc(db, 'config', cfgId);
-      await setDoc(ref, {
-        announceMode: form.announceMode,
-        voiceTemplate: form.voiceTemplate,
-        duckVolume: Number(form.duckVolume) || 0,
-        restoreVolume: Number(form.restoreVolume) || 0,
-        leadMs: Number(form.leadMs) || 0,
-        highlightColor: form.highlightColor || DEFAULTS.highlightColor,
+      const mainRef = doc(db, "config", "main");
+      await setDoc(mainRef, {
+        announceMode,
+        announceTemplate,
+        duckVolume: Number(duckVolume),
+        restoreVolume: Number(restoreVolume),
+        leadMs: Number(leadMs),
+        accentColor,
       }, { merge: true });
       setSaved(true);
-      setTimeout(()=> setSaved(false), 2000);
+      setTimeout(() => setSaved(false), 2500);
+    } catch (e) {
+      alert("Erro ao salvar configurações: " + (e?.message || e));
     } finally {
       setSaving(false);
     }
   }
 
-  async function test(){
-    setTesting(true);
+  async function testAnnounce() {
+    const nome = (testNome || "").trim();
+    const sala = (testSala || "").trim();
+    if (!nome) { alert("Digite um nome para testar"); return; }
     try {
-      await addDoc(collection(db, 'calls'), {
-        nome: testName,
-        sala: testSala,
+      await addDoc(collection(db, "calls"), {
+        nome, sala,
         timestamp: serverTimestamp(),
         test: true,
       });
-    } finally {
-      setTesting(false);
+      alert("Teste enviado. Veja/escute na TV.");
+    } catch (e) {
+      alert("Erro no teste: " + (e?.message || e));
     }
   }
 
-  if (loading) return <div style={boxStyle}><b>Carregando configurações…</b></div>;
+  if (loading) {
+    return (
+      <section style={container}>
+        <h2 style={{ marginTop: 0 }}>Configurações do anúncio</h2>
+        <div style={{ color: "#93a0b3" }}>Carregando…</div>
+      </section>
+    );
+  }
 
   return (
-    <div style={wrapStyle}>
-      <h2 style={{margin:'0 0 12px'}}>Configurações do anúncio</h2>
+    <section style={container}>
+      <h2 style={{ marginTop: 0 }}>Configurações do anúncio</h2>
 
-      <div style={gridStyle}>
-        <label style={labelStyle}>
-          Modo de anúncio
-          <select
-            value={form.announceMode}
-            onChange={e=> setForm(f=> ({...f, announceMode: e.target.value}))}
-            style={inputStyle}
-          >
-            <option value="auto">Automático (Fully → Voz do navegador → Beep)</option>
-            <option value="fully">Forçar Fully TTS</option>
-            <option value="web">Forçar Voz do navegador</option>
-            <option value="beep">Forçar Beep</option>
-          </select>
-        </label>
+      <div style={row}>
+        <div style={label}>Modo do anúncio</div>
+        <select
+          value={announceMode}
+          onChange={(e) => setAnnounceMode(e.target.value)}
+          style={select}
+        >
+          {MODES.map(m => (
+            <option key={m.value} value={m.value}>{m.label}</option>
+          ))}
+        </select>
+      </div>
 
-        <label style={labelStyle}>
-          Frase do anúncio
+      <div style={row}>
+        <div style={label}>Frase do anúncio</div>
+        <div>
           <input
-            type="text"
-            value={form.voiceTemplate}
-            onChange={e=> setForm(f=> ({...f, voiceTemplate: e.target.value}))}
-            style={inputStyle}
-            placeholder="Atenção: paciente {{nome}}. Dirija-se à sala {{sala}}."
+            style={input}
+            value={announceTemplate}
+            onChange={(e) => setAnnounceTemplate(e.target.value)}
           />
-          <small style={hintStyle}>Use: {'{{nome}}'}, {'{{sala}}'} ou {'{{salaTxt}}'}</small>
-        </label>
-
-        <div style={{display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:12}}>
-          <label style={labelStyle}>
-            Volume durante anúncio
-            <input type="number" min="0" max="100" value={form.duckVolume}
-              onChange={e=> setForm(f=>({...f, duckVolume: e.target.value}))}
-              style={inputStyle} />
-          </label>
-          <label style={labelStyle}>
-            Volume normal
-            <input type="number" min="0" max="100" value={form.restoreVolume}
-              onChange={e=> setForm(f=>({...f, restoreVolume: e.target.value}))}
-              style={inputStyle} />
-          </label>
-          <label style={labelStyle}>
-            Antecedência (ms)
-            <input type="number" min="0" max="3000" value={form.leadMs}
-              onChange={e=> setForm(f=>({...f, leadMs: e.target.value}))}
-              style={inputStyle} />
-          </label>
+          <div style={small}>
+            Use <code>{{"{{nome}}"}}</code>, <code>{{"{{sala}}"}}</code> e <code>{{"{{salaTxt}}"}}</code>.
+            Ex.: Atenção: paciente <b>{'{{nome}}'}</b>. Dirija-se à sala <b>{'{{sala}}'}</b>.
+          </div>
         </div>
-
-        <label style={labelStyle}>
-          Cor de destaque
-          <input type="color" value={form.highlightColor}
-            onChange={e=> setForm(f=> ({...f, highlightColor: e.target.value}))}
-            style={{...inputStyle, padding:0, height:44}} />
-        </label>
       </div>
 
-      <div style={{display:'flex', gap:12, marginTop:12}}>
+      <div style={row}>
+        <div style={label}>Volume durante anúncio</div>
+        <input
+          type="number"
+          min={0} max={100}
+          value={duckVolume}
+          onChange={(e) => setDuckVolume(Number(e.target.value))}
+          style={input}
+        />
+      </div>
+
+      <div style={row}>
+        <div style={label}>Volume normal</div>
+        <input
+          type="number"
+          min={0} max={100}
+          value={restoreVolume}
+          onChange={(e) => setRestoreVolume(Number(e.target.value))}
+          style={input}
+        />
+      </div>
+
+      <div style={row}>
+        <div style={label}>Antecedência (ms)</div>
+        <input
+          type="number"
+          min={0} max={2000} step={50}
+          value={leadMs}
+          onChange={(e) => setLeadMs(Number(e.target.value))}
+          style={input}
+        />
+      </div>
+
+      <div style={row}>
+        <div style={label}>Cor de destaque</div>
+        <input
+          type="color"
+          value={accentColor}
+          onChange={(e) => setAccentColor(e.target.value)}
+          style={{ ...input, padding: 0, height: 40 }}
+        />
+      </div>
+
+      <div style={btnRow}>
         <button onClick={save} disabled={saving} style={btnPrimary}>
-          {saving ? 'Salvando…' : 'Salvar'}
+          {saving ? "Salvando…" : "Salvar"}
         </button>
-        {saved && <span style={{color:'#4ade80', fontWeight:700'}}>Salvo!</span>}
+        {saved ? <span style={{ color: "#4ade80", fontWeight: 700 }}>Salvo!</span> : null}
       </div>
 
-      <hr style={{margin:'18px 0', border:'none', borderTop:'1px solid rgba(255,255,255,0.15)'}} />
+      <hr style={{ margin: "18px 0", border: "none", borderTop: "1px solid rgba(255,255,255,0.15)" }} />
 
-      <h3 style={{margin:'0 0 8px'}}>Testar anúncio</h3>
-      <div style={{display:'flex', gap:12, flexWrap:'wrap'}}>
-        <input
-          type="text" value={testName} onChange={e=> setTestName(e.target.value)}
-          placeholder="Nome do paciente"
-          style={{...inputStyle, minWidth:240}}
-        />
-        <input
-          type="text" value={testSala} onChange={e=> setTestSala(e.target.value)}
-          placeholder="Sala"
-          style={{...inputStyle, width:140}}
-        />
-        <button onClick={test} disabled={testing} style={btn}>
-          {testing ? 'Testando…' : 'Testar anúncio'}
-        </button>
-        <small style={hintStyle}>O teste fala na TV, mas **não** entra no histórico (a TV ignora itens com <code>test:true</code>).</small>
+      <h3>Teste rápido</h3>
+      <div style={row}>
+        <div style={label}>Nome</div>
+        <input style={input} value={testNome} onChange={(e)=>setTestNome(e.target.value)} placeholder="Fulano da Silva" />
       </div>
-    </div>
+      <div style={row}>
+        <div style={label}>Sala</div>
+        <input style={input} value={testSala} onChange={(e)=>setTestSala(e.target.value)} placeholder="2" />
+      </div>
+      <div style={btnRow}>
+        <button onClick={testAnnounce} style={btnSecondary}>Testar anúncio</button>
+        <span style={small}>O teste fala na TV mas é marcado como <b>test</b> e pode ser filtrado do histórico.</span>
+      </div>
+    </section>
   );
 }
-
-const wrapStyle = { border:'1px solid rgba(255,255,255,0.15)', borderRadius:12, padding:16, marginTop:16, background:'rgba(255,255,255,0.03)' };
-const gridStyle = { display:'grid', gap:12 };
-const labelStyle = { display:'grid', gap:6, fontWeight:700 };
-const inputStyle = { background:'rgba(0,0,0,0.35)', border:'1px solid rgba(255,255,255,0.2)', borderRadius:8, padding:'10px 12px', color:'#fff' };
-const btnPrimary = { background:'#3b82f6', color:'#fff', border:'0', borderRadius:10, padding:'10px 16px', fontWeight:800 };
-const btn = { background:'rgba(255,255,255,0.1)', color:'#fff', border:'0', borderRadius:10, padding:'10px 16px', fontWeight:800 };
-const boxStyle = { padding:16, border:'1px dashed rgba(255,255,255,0.3)', borderRadius:12 };
-const hintStyle = { color:'#93a0b3' };
