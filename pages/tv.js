@@ -1,70 +1,85 @@
-/* pages/tv.js — Integra configs do anúncio e ignora 'test' no histórico
-   - Lê doc 'config/main' (ou primeiro doc) e publica em window.tvAnnounceCfg
-   - Atualiza CSS var '--tv-accent' com highlightColor
-   - Histórico mostra somente itens com test != true (apenas 2 últimos)
-*/
 import Head from 'next/head';
 import Script from 'next/script';
 import { useEffect, useRef, useState } from 'react';
 import { db } from '../utils/firebase';
-import { collection, query, orderBy, limit, onSnapshot } from 'firebase/firestore';
+import { collection, query, orderBy, limit, onSnapshot, doc } from 'firebase/firestore';
 import YoutubePlayer from '../components/YoutubePlayer';
 import Carousel from '../components/Carousel';
 
+// util: aplica cor de destaque no CSS
+function applyAccent(color){
+  try { document.documentElement.style.setProperty('--tv-accent', color || '#44b2e7'); } catch {}
+}
+
 export default function TV(){
-  const [list, setList] = useState([]);
+  const [history, setHistory] = useState([]);
   const [videoId, setVideoId] = useState('');
   const [currentName, setCurrentName] = useState('—');
   const [currentSala, setCurrentSala] = useState('');
+  const [configSource, setConfigSource] = useState('');
+
   const lastAnnouncedRef = useRef('');
 
+  // Assina chamadas (pega 5, filtra test)
   useEffect(() => {
-    // Chamada: pega 5 para garantir não perder teste/atual
     const qCalls = query(collection(db, 'calls'), orderBy('timestamp', 'desc'), limit(5));
-    const unsubCalls = onSnapshot(qCalls, (snap) => {
-      const rows = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      setList(rows);
-      // atual = primeiro NÃO test
-      const nonTest = rows.filter(r => !r.test);
-      if (nonTest.length) {
-        const { nome, sala } = nonTest[0];
+    const unsub = onSnapshot(qCalls, (snap) => {
+      const raw = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const list = raw.filter(x => !x.test); // ignora testes
+      setHistory(list);
+      if (list.length) {
+        const { nome, sala } = list[0] || {};
         if (nome) setCurrentName(String(nome));
         if (sala != null) setCurrentSala(String(sala));
       }
-      // se o primeiro item for um teste, anuncia mas não mostra no histórico
-      const first = rows[0];
-      if (first && first.test && typeof window !== 'undefined' && typeof window.tvAnnounce === 'function') {
-        try { window.tvAnnounce(String(first.nome||''), String(first.sala||'')); } catch {}
-      }
     });
-
-    // Configurações
-    const unsubCfg = onSnapshot(collection(db, 'config'), (snap) => {
-      if (!snap.empty) {
-        const data = snap.docs.find(d => d.id === 'main')?.data() || snap.docs[0].data();
-        if (data?.videoId) setVideoId(String(data.videoId));
-        if (typeof window !== 'undefined') {
-          window.tvAnnounceCfg = Object.assign({}, window.tvAnnounceCfg || {}, {
-            announceMode: data?.announceMode,
-            voiceTemplate: data?.voiceTemplate,
-            duckVolume: data?.duckVolume,
-            restoreVolume: data?.restoreVolume,
-            leadMs: data?.leadMs,
-          });
-        }
-        if (data?.highlightColor && typeof document !== 'undefined') {
-          document.documentElement.style.setProperty('--tv-accent', data.highlightColor);
-        }
-      }
-    });
-
-    return () => { unsubCalls(); unsubCfg(); };
+    return () => unsub();
   }, []);
 
+  // Assina config: tenta doc config/main; se não existir, usa o 1º doc da coleção
+  useEffect(() => {
+    let usedMain = false;
+    const unsubMain = onSnapshot(doc(db,'config','main'), (snap) => {
+      if (snap.exists()) {
+        usedMain = true;
+        setConfigSource('config/main');
+        applyConfig(snap.data());
+      }
+    });
+    const unsubCol = onSnapshot(collection(db,'config'), (snap) => {
+      if (usedMain) return;
+      if (!snap.empty) {
+        setConfigSource('config/[first]');
+        applyConfig(snap.docs[0].data());
+      }
+    });
+    function applyConfig(data){
+      if (!data) return;
+      // vídeoId (se seu admin salvar aqui)
+      if (data.videoId) setVideoId(String(data.videoId));
+      // modo/volumes/template/cor
+      const cfg = {
+        announceMode: data.announceMode || 'auto',
+        announceTemplate: data.announceTemplate || 'Atenção: paciente {{nome}}. Dirija-se à sala {{salaTxt}}.',
+        duckVolume: Number.isFinite(data.duckVolume) ? Number(data.duckVolume) : 20,
+        restoreVolume: Number.isFinite(data.restoreVolume) ? Number(data.restoreVolume) : 60,
+        leadMs: Number.isFinite(data.leadMs) ? Number(data.leadMs) : 450,
+        accentColor: data.accentColor || '#44b2e7',
+      };
+      applyAccent(cfg.accentColor);
+      // publica global para tv-ducking.js
+      if (typeof window !== 'undefined') {
+        window.tvConfig = { ...cfg };
+      }
+    }
+    return () => { unsubMain(); unsubCol(); };
+  }, []);
+
+  // Quando o nome muda, solicita anúncio ao script (respeita config)
   useEffect(() => {
     if (!currentName || currentName === '—') return;
-    const box = document.querySelector('.current-call');
-    if (box) { box.classList.remove('flash'); void box.offsetWidth; box.classList.add('flash'); }
+    const row = document.querySelector('.current-call');
+    if (row){ row.classList.remove('flash'); void row.offsetWidth; row.classList.add('flash'); }
     if (typeof window !== 'undefined') {
       if (lastAnnouncedRef.current !== currentName) {
         lastAnnouncedRef.current = currentName;
@@ -74,8 +89,6 @@ export default function TV(){
       }
     }
   }, [currentName, currentSala]);
-
-  const history = list.filter(r => !r.test).slice(1, 3);
 
   return (
     <div className="tv-screen">
@@ -100,12 +113,11 @@ export default function TV(){
       </div>
 
       <div className="tv-footer">
+        {/* 2 últimos (exclui atual) */}
         <div className="called-list">
-          {history.length ? (
-            history.map((h) => (
-              <span key={h.id} className="called-chip">
-                {h.nome} – Sala {h.sala}
-              </span>
+          {history.slice(1, 3).length ? (
+            history.slice(1, 3).map((h, i) => (
+              <span key={i} className="called-chip">{h.nome} – Sala {h.sala}</span>
             ))
           ) : (
             <span className="muted">Sem chamados recentes…</span>
