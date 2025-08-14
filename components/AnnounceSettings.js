@@ -1,3 +1,4 @@
+// components/AnnounceSettings.js (corrigido) — 2025-08-13
 import { useEffect, useState } from "react";
 import { db } from "../utils/firebase";
 import {
@@ -7,9 +8,9 @@ import {
   collection,
   getDocs,
   addDoc,
-  limit,
-  query,
   serverTimestamp,
+  query,
+  limit,
 } from "firebase/firestore";
 
 export default function AnnounceSettings() {
@@ -38,9 +39,7 @@ export default function AnnounceSettings() {
         // tenta doc fixo "main"
         const mainRef = doc(db, "config", "main");
         const mainSnap = await getDoc(mainRef);
-        if (mainSnap.exists()) {
-          data = mainSnap.data();
-        }
+        if (mainSnap.exists()) data = mainSnap.data();
 
         // se não houver, pega o primeiro da coleção
         if (!data) {
@@ -58,7 +57,7 @@ export default function AnnounceSettings() {
           if (Number.isFinite(data.leadMs)) setLeadMs(Number(data.leadMs));
           if (data.accentColor) setAccentColor(String(data.accentColor));
         }
-      } catch (err):
+      } catch (err) {
         setLoadError("Não foi possível carregar as configurações (verifique as permissões do Firestore).");
       }
     }
@@ -70,15 +69,19 @@ export default function AnnounceSettings() {
     setSaved(false);
     try {
       const ref = doc(db, "config", "main");
-      await setDoc(ref, {
-        announceMode,
-        announceTemplate,
-        duckVolume: Number(duckVolume),
-        restoreVolume: Number(restoreVolume),
-        leadMs: Number(leadMs),
-        accentColor,
-        updatedAt: serverTimestamp(),
-      }, { merge: true });
+      await setDoc(
+        ref,
+        {
+          announceMode,
+          announceTemplate,
+          duckVolume: Number(duckVolume),
+          restoreVolume: Number(restoreVolume),
+          leadMs: Number(leadMs),
+          accentColor,
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true }
+      );
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
     } catch (e) {
@@ -99,7 +102,8 @@ export default function AnnounceSettings() {
         timestamp: serverTimestamp(),
         test: true,
       });
-      setTestName(""); setTestRoom("");
+      setTestName("");
+      setTestRoom("");
     } catch (e) {
       alert("Erro ao criar teste. Verifique as permissões de escrita em 'calls'.");
     }
