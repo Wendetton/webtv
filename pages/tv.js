@@ -1,4 +1,4 @@
-// pages/tv.js — ouve 'calls' (histórico) e 'recalls' (som sem poluir)
+// pages/tv.js — robusto para REchamar: fala com retries se o tvAnnounce ainda não carregou
 import Head from 'next/head';
 import Script from 'next/script';
 import { useEffect, useRef, useState } from 'react';
@@ -9,6 +9,24 @@ import Carousel from '../components/Carousel';
 
 function applyAccent(color){
   try { document.documentElement.style.setProperty('--tv-accent', color || '#44b2e7'); } catch {}
+}
+
+// tenta anunciar agora; se o script ainda não tiver carregado, re-tenta algumas vezes
+function speakWithRetry(nome, sala, attempts = 8, delay = 350) {
+  if (!nome) return;
+  const call = () => {
+    try {
+      if (typeof window !== 'undefined' && typeof window.tvAnnounce === 'function') {
+        window.tvAnnounce(String(nome), sala != null ? String(sala) : '');
+        return true;
+      }
+    } catch {}
+    return false;
+  };
+  if (call()) return;
+  if (attempts > 1) {
+    setTimeout(() => speakWithRetry(nome, sala, attempts - 1, delay), delay);
+  }
 }
 
 export default function TV(){
@@ -31,13 +49,16 @@ export default function TV(){
         if (nome) setCurrentName(String(nome));
         if (sala != null) setCurrentSala(String(sala));
       }
+
       if (initializedCallsRef.current) {
         const changes = snap.docChanges();
         for (const ch of changes) {
           if (ch.type === 'added') {
             const d = ch.doc.data();
-            if (!d?.test && typeof window !== 'undefined' && typeof window.tvAnnounce === 'function') {
-              window.tvAnnounce(String(d.nome || ''), d.sala != null ? String(d.sala) : '');
+            if (!d?.test) {
+              const row = document.querySelector('.current-call');
+              if (row){ row.classList.remove('flash'); void row.offsetWidth; row.classList.add('flash'); }
+              speakWithRetry(d.nome, d.sala);
             }
           }
         }
@@ -57,9 +78,7 @@ export default function TV(){
         for (const ch of changes) {
           if (ch.type === 'added') {
             const d = ch.doc.data();
-            if (typeof window !== 'undefined' && typeof window.tvAnnounce === 'function') {
-              window.tvAnnounce(String(d.nome || ''), d.sala != null ? String(d.sala) : '');
-            }
+            speakWithRetry(d.nome, d.sala);
           }
         }
       } else {
