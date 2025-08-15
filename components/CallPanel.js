@@ -1,4 +1,4 @@
-// components/CallPanel.js — Chamadas + Rechamar + Limpar + Status na TV + idle/logo
+// components/CallPanel.js — Chamadas + Rechamar + Limpar + Status na TV + idle/logo (60–300s)
 // 2025-08-15
 import { useEffect, useState } from "react";
 import { db } from "../utils/firebase";
@@ -144,6 +144,7 @@ export default function CallPanel(){
   const [tvForcedIdle, setTvForcedIdle] = useState(false);
   const [tvLastCallAt, setTvLastCallAt] = useState(null);
   const [tvAutoIdle, setTvAutoIdle] = useState(false);
+  const [tvIdleSeconds, setTvIdleSeconds] = useState(120); // NOVO: lido do config/main
 
   // mesmos 5 docs da TV
   useEffect(() => {
@@ -173,16 +174,28 @@ export default function CallPanel(){
     return () => unsub();
   }, []);
 
-  // calcula auto-idle (2 minutos)
+  // NOVO: lê idleSeconds do config/main para usar no status
+  useEffect(() => {
+    const unsub = onSnapshot(doc(db, "config", "main"), (snap) => {
+      if (!snap.exists()) return;
+      const d = snap.data() || {};
+      if (Number.isFinite(d.idleSeconds)) {
+        setTvIdleSeconds(Math.min(300, Math.max(60, Number(d.idleSeconds))));
+      }
+    });
+    return () => unsub();
+  }, []);
+
+  // calcula auto-idle usando tvIdleSeconds
   useEffect(() => {
     const tick = () => {
       if (!tvLastCallAt) { setTvAutoIdle(false); return; }
-      setTvAutoIdle(Date.now() - tvLastCallAt >= 120000);
+      setTvAutoIdle(Date.now() - tvLastCallAt >= tvIdleSeconds * 1000);
     };
     tick();
     const t = setInterval(tick, 5000);
     return () => clearInterval(t);
-  }, [tvLastCallAt]);
+  }, [tvLastCallAt, tvIdleSeconds]);
 
   const tvIsIdle = tvForcedIdle || tvAutoIdle || tvHistory.length === 0;
   const tvNow = tvIsIdle
@@ -254,7 +267,9 @@ export default function CallPanel(){
             </div>
           </div>
           <div style={{marginTop:6, fontSize:12, opacity:.7}}>
-            {tvIsIdle ? "Modo logo (sem paciente sendo exibido)" : "Exibindo paciente em chamada"}
+            {tvIsIdle
+              ? `Modo logo (sem paciente sendo exibido) • Volta ao logo em ${tvIdleSeconds}s sem novas chamadas`
+              : `Exibindo paciente em chamada • Retorna ao logo após ${tvIdleSeconds}s sem novas chamadas`}
           </div>
         </div>
 
