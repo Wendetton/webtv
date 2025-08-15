@@ -1,4 +1,5 @@
-// components/CallPanel.js — REchamar via coleção 'recalls' (não polui histórico) — 2025-08-15
+// components/CallPanel.js — REchamar em 'calls' com recall:true (não polui histórico)
+// 2025-08-15
 import { useEffect, useState } from "react";
 import { db } from "../utils/firebase";
 import {
@@ -37,7 +38,7 @@ export default function CallPanel(){
     const unsub = onSnapshot(q, (snap) => {
       const items = snap.docs
         .map((d) => ({ id: d.id, ...d.data() }))
-        .filter((x) => !x.test);
+        .filter((x) => !x.test); // (recall aparece aqui mas a TV filtra na exibição)
       setList(items);
     });
     return () => unsub();
@@ -53,7 +54,7 @@ export default function CallPanel(){
         nome,
         sala,
         timestamp: serverTimestamp(),
-        ...extra,
+        ...extra, // ex.: { recall:true }
       });
       // guarda consultório para a próxima chamada
       try { localStorage.setItem("last_consultorio", sala); } catch {}
@@ -70,29 +71,17 @@ export default function CallPanel(){
     await callNow(name, room);
   }
 
-  // RECHAMAR: cria doc em 'recalls' (para a TV falar) sem mexer no histórico
-  async function createRecall(n, r){
-    try {
-      await addDoc(collection(db, "recalls"), {
-        nome: n,
-        sala: r,
-        timestamp: serverTimestamp(),
-      });
-    } catch (e) {
-      alert("Erro ao rechamar. Verifique permissões de escrita na coleção 'recalls'.");
-    }
-  }
-
+  // RECHAMAR: cria um novo doc em 'calls' com recall:true (TV não mostra no histórico)
   async function handleRecallLast(){
     if (!list.length) return;
     const last = list[0]; // último real
-    await createRecall(String(last.nome || ""), String(last.sala || ""));
+    await callNow(String(last.nome || ""), String(last.sala || ""), { recall: true });
   }
 
   async function handleRecall(id){
     const item = list.find(x => x.id === id);
     if (!item) return;
-    await createRecall(String(item.nome || ""), String(item.sala || ""));
+    await callNow(String(item.nome || ""), String(item.sala || ""), { recall: true });
   }
 
   // limpeza de hoje
@@ -101,7 +90,6 @@ export default function CallPanel(){
     const now = new Date();
     const start = new Date(now.getFullYear(), now.getMonth(), now.getDate()); // 00:00 local
     try {
-      // pega até 200 docs de hoje
       const q = query(
         collection(db, "calls"),
         where("timestamp", ">=", start),
