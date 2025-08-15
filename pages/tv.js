@@ -1,4 +1,4 @@
-// pages/tv.js — modo ocioso com logo menor e fundo branco (cartão com transição)
+// pages/tv.js — modo ocioso: fundo branco ocupa todo o box “Chamando agora”
 import Head from 'next/head';
 import Script from 'next/script';
 import { useEffect, useRef, useState } from 'react';
@@ -168,13 +168,9 @@ export default function TV(){
           )}
         </div>
 
-        <div className={`current-call ${isIdle ? 'idle' : ''}`}>
+        <div className={`current-call ${isIdle ? 'idle idle-full' : ''}`}>
           {isIdle ? (
-            <div className="idle-wrap">
-              <div className="idle-card">
-                <img className="idle-logo" src="/logo.png" alt="Logo da clínica" />
-              </div>
-            </div>
+            <img className="idle-logo" src="/logo.png" alt="Logo da clínica" />
           ) : (
             <>
               <div className="label">Chamando agora</div>
@@ -187,43 +183,26 @@ export default function TV(){
 
       <Script src="/tv-ducking.js" strategy="afterInteractive" />
 
-      {/* estilos do cartão de logo (fundo branco, menor, moderno) */}
+      {/* estilos: fundo branco ocupa TODO o box; logo centralizada e contida */}
       <style jsx global>{`
-        .current-call.idle {
+        .current-call.idle.idle-full {
           display: flex;
           align-items: center;
           justify-content: center;
-          padding: 14px 16px;
-          background: transparent; /* o cartão branco fica dentro */
-        }
-        .idle-wrap {
-          width: 100%;
-          height: 100%;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-        }
-        .idle-card {
           background: #ffffff;
-          border-radius: 18px;
-          padding: 20px 28px;
-          box-shadow: 0 10px 28px rgba(0,0,0,.18), inset 0 0 0 1px rgba(0,0,0,.06);
-          /* limita o tamanho do cartão para não “dominar” a área */
-          width: clamp(280px, 40vw, 720px);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          opacity: 0; transform: scale(.98);
-          animation: tvFadeIn 360ms ease forwards;
+          /* mantém cantos iguais ao estilo do box original */
+          border-radius: inherit;
+          /* reforça uma linha sutil para destacar do fundo da página */
+          box-shadow: inset 0 0 0 1px rgba(0,0,0,.06), 0 10px 28px rgba(0,0,0,.08);
+          transition: background .25s ease, box-shadow .25s ease;
         }
-        .idle-logo {
-          /* logo bem menor que antes */
-          width: clamp(160px, 70%, 520px);
-          height: auto;
+        .current-call.idle.idle-full .idle-logo {
+          max-width: clamp(220px, 40%, 600px);
+          max-height: 70%;
           object-fit: contain;
-          filter: drop-shadow(0 6px 16px rgba(0,0,0,.16));
-          opacity: 0; transform: translateY(2px);
-          animation: tvFadeIn 420ms ease 40ms forwards;
+          filter: drop-shadow(0 6px 16px rgba(0,0,0,.12));
+          opacity: 0; transform: scale(.98);
+          animation: tvFadeIn 380ms ease forwards;
         }
         @keyframes tvFadeIn { to { opacity: 1; transform: none; } }
       `}</style>
