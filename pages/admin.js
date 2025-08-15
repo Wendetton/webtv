@@ -26,6 +26,7 @@ export default function Admin() {
   return (
     <div style={{ maxWidth: 700, margin: "40px auto", fontFamily: "sans-serif" }}>
       <h2>Painel Administrativo</h2>
+      <CallPanel />
       <PatientCall />
       <PatientHistory history={history} loading={loading} />
       <YoutubeConfig />
