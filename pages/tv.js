@@ -1,4 +1,4 @@
-// pages/tv.js — áudio baseado em config/announce (funciona sempre, mesmo nome)
+// pages/tv.js — modo ocioso com logo após limpar histórico + transição suave
 import Head from 'next/head';
 import Script from 'next/script';
 import { useEffect, useRef, useState } from 'react';
@@ -31,45 +31,67 @@ export default function TV(){
   const [videoId, setVideoId] = useState('');
   const [currentName, setCurrentName] = useState('—');
   const [currentSala, setCurrentSala] = useState('');
+  const [forcedIdle, setForcedIdle] = useState(false); // admin pode forçar "logo"
   const initCallsRef = useRef(false);
   const initAnnounceRef = useRef(false);
   const lastNonceRef = useRef('');
+
+  const isIdle = forcedIdle || history.length === 0;
 
   // Histórico e "Chamando agora"
   useEffect(() => {
     const qCalls = query(collection(db, 'calls'), orderBy('timestamp', 'desc'), limit(5));
     const unsub = onSnapshot(qCalls, (snap) => {
       const raw = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      // se quiser esconder re-call do histórico visual, filtre !x.recall:
+      // não mostrar testes nem re-chamadas no histórico visual
       const list = raw.filter(x => !x.test && !x.recall);
       setHistory(list);
+
       if (list.length) {
         const { nome, sala } = list[0] || {};
-        if (nome) setCurrentName(String(nome));
-        if (sala != null) setCurrentSala(String(sala));
+        setCurrentName(nome ? String(nome) : '—');
+        setCurrentSala(sala != null ? String(sala) : '');
+      } else {
+        // se ficou vazio, limpamos os textos (e a UI mostra a logo)
+        setCurrentName('');
+        setCurrentSala('');
       }
+
       if (!initCallsRef.current) initCallsRef.current = true;
     });
     return () => unsub();
   }, []);
 
-  // Gatilho universal de anúncio: config/announce (funciona para CALL e RECALL)
+  // Gatilho universal de anúncio + modo ocioso
+  // Doc: config/announce
+  //  - nonce: muda a cada chamado/rechamado → fala
+  //  - idle: true → força mostrar logo (até novo chamado)
   useEffect(() => {
     const unsub = onSnapshot(doc(db,'config','announce'), (snap) => {
       if (!snap.exists()) return;
       const d = snap.data();
       const nonce = String(d.nonce || '');
-      if (!initAnnounceRef.current) { // primeira carga não fala
+
+      // primeira carga não fala
+      if (!initAnnounceRef.current) {
         initAnnounceRef.current = true;
         lastNonceRef.current = nonce;
-        return;
+      } else {
+        if (nonce && nonce !== lastNonceRef.current) {
+          lastNonceRef.current = nonce;
+          // sair de idle quando houver um novo anúncio explícito
+          if (d.idle === false) setForcedIdle(false);
+          speakWithRetry(d.nome, d.sala);
+          // pequena vibração visual
+          const row = document.querySelector('.current-call');
+          if (row){ row.classList.remove('flash'); void row.offsetWidth; row.classList.add('flash'); }
+        }
       }
-      if (nonce && nonce !== lastNonceRef.current) {
-        lastNonceRef.current = nonce;
-        speakWithRetry(d.nome, d.sala);
-        // brilho visual (sem mexer no histórico)
-        const row = document.querySelector('.current-call');
-        if (row){ row.classList.remove('flash'); void row.offsetWidth; row.classList.add('flash'); }
+
+      // aplicar/retirar modo ocioso conforme admin
+      if (typeof d.idle === 'boolean') {
+        setForcedIdle(Boolean(d.idle));
+        if (d.idle) { setCurrentName(''); setCurrentSala(''); }
       }
     });
     return () => unsub();
@@ -155,14 +177,52 @@ export default function TV(){
           )}
         </div>
 
-        <div className="current-call">
-          <div className="label">Chamando agora</div>
-          <div id="current-call-name">{currentName || '—'}</div>
-          <div className="sub">{currentSala ? `Consultório ${currentSala}` : ''}</div>
+        <div className={`current-call ${isIdle ? 'idle' : ''}`}>
+          {isIdle ? (
+            <div className="idle-wrap">
+              <img className="idle-logo" src="/logo.png" alt="Logo da clínica" />
+            </div>
+          ) : (
+            <>
+              <div className="label">Chamando agora</div>
+              <div id="current-call-name">{currentName || '—'}</div>
+              <div className="sub">{currentSala ? `Consultório ${currentSala}` : ''}</div>
+            </>
+          )}
         </div>
       </div>
 
       <Script src="/tv-ducking.js" strategy="afterInteractive" />
+
+      {/* estilos específicos para o estado ocioso (logo) */}
+      <style jsx global>{`
+        .current-call.idle {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+        }
+        .idle-wrap {
+          animation: tvFadeIn 380ms ease forwards;
+          width: 100%;
+          height: 100%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+        .idle-logo {
+          max-width: 70%;
+          max-height: 70%;
+          object-fit: contain;
+          filter: drop-shadow(0 10px 28px rgba(0,0,0,.28));
+          opacity: 0;
+          transform: scale(.98);
+          animation: tvFadeIn 420ms ease 40ms forwards;
+        }
+        @keyframes tvFadeIn {
+          to { opacity: 1; transform: scale(1); }
+        }
+      `}</style>
     </div>
   );
 }
