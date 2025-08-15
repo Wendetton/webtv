@@ -1,4 +1,4 @@
-// pages/tv.js — robusto para REchamar: fala com retries se o tvAnnounce ainda não carregou
+// pages/tv.js — anuncia em REchamar (calls com recall:true) e não polui histórico
 import Head from 'next/head';
 import Script from 'next/script';
 import { useEffect, useRef, useState } from 'react';
@@ -11,7 +11,6 @@ function applyAccent(color){
   try { document.documentElement.style.setProperty('--tv-accent', color || '#44b2e7'); } catch {}
 }
 
-// tenta anunciar agora; se o script ainda não tiver carregado, re-tenta algumas vezes
 function speakWithRetry(nome, sala, attempts = 8, delay = 350) {
   if (!nome) return;
   const call = () => {
@@ -35,14 +34,14 @@ export default function TV(){
   const [currentName, setCurrentName] = useState('—');
   const [currentSala, setCurrentSala] = useState('');
   const initializedCallsRef = useRef(false);
-  const initializedRecallsRef = useRef(false);
 
-  // Assina chamadas (pega 5, filtra test) — atualiza UI e anuncia ADDED
+  // Assina chamadas (pega 5) — atualiza UI e anuncia ADDED
   useEffect(() => {
     const qCalls = query(collection(db, 'calls'), orderBy('timestamp', 'desc'), limit(5));
     const unsub = onSnapshot(qCalls, (snap) => {
+      // lista da TV: EXCLUI recall e test
       const raw = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      const list = raw.filter(x => !x.test);
+      const list = raw.filter(x => !x.test && !x.recall);
       setHistory(list);
       if (list.length) {
         const { nome, sala } = list[0] || {};
@@ -50,6 +49,7 @@ export default function TV(){
         if (sala != null) setCurrentSala(String(sala));
       }
 
+      // anuncio: qualquer ADDED (inclusive recall) depois da 1ª carga
       if (initializedCallsRef.current) {
         const changes = snap.docChanges();
         for (const ch of changes) {
@@ -69,26 +69,7 @@ export default function TV(){
     return () => unsub();
   }, []);
 
-  // Assina RECALLS (somente som, sem alterar UI)
-  useEffect(() => {
-    const qRecalls = query(collection(db, 'recalls'), orderBy('timestamp', 'desc'), limit(10));
-    const unsub = onSnapshot(qRecalls, (snap) => {
-      if (initializedRecallsRef.current) {
-        const changes = snap.docChanges();
-        for (const ch of changes) {
-          if (ch.type === 'added') {
-            const d = ch.doc.data();
-            speakWithRetry(d.nome, d.sala);
-          }
-        }
-      } else {
-        initializedRecallsRef.current = true;
-      }
-    });
-    return () => unsub();
-  }, []);
-
-  // Assina configurações (config/main -> fallback 1º doc)
+  // Configurações (config/main -> fallback 1º doc)
   useEffect(() => {
     let usedMain = false;
     const unsubMain = onSnapshot(doc(db,'config','main'), (snap) => {
@@ -121,7 +102,7 @@ export default function TV(){
     return () => { unsubMain(); unsubColForSettings(); };
   }, []);
 
-  // Assina o videoId separadamente (pega de qualquer doc em 'config')
+  // videoId (de qualquer doc da coleção config)
   useEffect(() => {
     const unsubVid = onSnapshot(collection(db,'config'), (snap) => {
       let vid = '';
