@@ -1,3 +1,4 @@
+// pages/tv.js — apenas ajusta o label para "Consultório" (mantém resto como está)
 import Head from 'next/head';
 import Script from 'next/script';
 import { useEffect, useRef, useState } from 'react';
@@ -17,7 +18,6 @@ export default function TV(){
   const [currentSala, setCurrentSala] = useState('');
   const lastAnnouncedRef = useRef('');
 
-  // Assina chamadas (pega 5, filtra test)
   useEffect(() => {
     const qCalls = query(collection(db, 'calls'), orderBy('timestamp', 'desc'), limit(5));
     const unsub = onSnapshot(qCalls, (snap) => {
@@ -33,7 +33,6 @@ export default function TV(){
     return () => unsub();
   }, []);
 
-  // Assina configurações de anúncio (config/main -> fallback primeiro doc)
   useEffect(() => {
     let usedMain = false;
     const unsubMain = onSnapshot(doc(db,'config','main'), (snap) => {
@@ -66,7 +65,6 @@ export default function TV(){
     return () => { unsubMain(); unsubColForSettings(); };
   }, []);
 
-  // Assina o videoId de forma independente (procura em QUALQUER doc da coleção 'config')
   useEffect(() => {
     const unsubVid = onSnapshot(collection(db,'config'), (snap) => {
       let vid = '';
@@ -76,12 +74,11 @@ export default function TV(){
           vid = String(data.videoId);
         }
       });
-      setVideoId(vid); // se não achar, fica ''
+      setVideoId(vid);
     });
     return () => unsubVid();
   }, []);
 
-  // Quando o nome muda, solicita anúncio ao script
   useEffect(() => {
     if (!currentName || currentName === '—') return;
     const row = document.querySelector('.current-call');
@@ -122,7 +119,7 @@ export default function TV(){
         <div className="called-list">
           {history.slice(1, 3).length ? (
             history.slice(1, 3).map((h, i) => (
-              <span key={i} className="called-chip">{h.nome} – Sala {h.sala}</span>
+              <span key={i} className="called-chip">{h.nome} — Consultório {h.sala}</span>
             ))
           ) : (
             <span className="muted">Sem chamados recentes…</span>
@@ -132,7 +129,7 @@ export default function TV(){
         <div className="current-call">
           <div className="label">Chamando agora</div>
           <div id="current-call-name">{currentName || '—'}</div>
-          <div className="sub">{currentSala ? `Sala ${currentSala}` : ''}</div>
+          <div className="sub">{currentSala ? `Consultório ${currentSala}` : ''}</div>
         </div>
       </div>
 
