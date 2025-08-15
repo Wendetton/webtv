@@ -27,7 +27,6 @@ export default function Admin() {
     <div style={{ maxWidth: 700, margin: "40px auto", fontFamily: "sans-serif" }}>
       <h2>Painel Administrativo</h2>
       <CallPanel />
-      <PatientHistory history={history} loading={loading} />
       <YoutubeConfig />
       <ImageUploader /> {/* <-- Adicione aqui o painel de upload e pré-visualização */}
       <AnnounceSettings />
