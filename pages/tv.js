@@ -1,4 +1,4 @@
-// pages/tv.js — anuncia em REchamar (calls com recall:true) e não polui histórico
+// pages/tv.js — áudio baseado em config/announce (funciona sempre, mesmo nome)
 import Head from 'next/head';
 import Script from 'next/script';
 import { useEffect, useRef, useState } from 'react';
@@ -23,9 +23,7 @@ function speakWithRetry(nome, sala, attempts = 8, delay = 350) {
     return false;
   };
   if (call()) return;
-  if (attempts > 1) {
-    setTimeout(() => speakWithRetry(nome, sala, attempts - 1, delay), delay);
-  }
+  if (attempts > 1) setTimeout(() => speakWithRetry(nome, sala, attempts - 1, delay), delay);
 }
 
 export default function TV(){
@@ -33,14 +31,16 @@ export default function TV(){
   const [videoId, setVideoId] = useState('');
   const [currentName, setCurrentName] = useState('—');
   const [currentSala, setCurrentSala] = useState('');
-  const initializedCallsRef = useRef(false);
+  const initCallsRef = useRef(false);
+  const initAnnounceRef = useRef(false);
+  const lastNonceRef = useRef('');
 
-  // Assina chamadas (pega 5) — atualiza UI e anuncia ADDED
+  // Histórico e "Chamando agora"
   useEffect(() => {
     const qCalls = query(collection(db, 'calls'), orderBy('timestamp', 'desc'), limit(5));
     const unsub = onSnapshot(qCalls, (snap) => {
-      // lista da TV: EXCLUI recall e test
       const raw = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      // se quiser esconder re-call do histórico visual, filtre !x.recall:
       const list = raw.filter(x => !x.test && !x.recall);
       setHistory(list);
       if (list.length) {
@@ -48,22 +48,28 @@ export default function TV(){
         if (nome) setCurrentName(String(nome));
         if (sala != null) setCurrentSala(String(sala));
       }
+      if (!initCallsRef.current) initCallsRef.current = true;
+    });
+    return () => unsub();
+  }, []);
 
-      // anuncio: qualquer ADDED (inclusive recall) depois da 1ª carga
-      if (initializedCallsRef.current) {
-        const changes = snap.docChanges();
-        for (const ch of changes) {
-          if (ch.type === 'added') {
-            const d = ch.doc.data();
-            if (!d?.test) {
-              const row = document.querySelector('.current-call');
-              if (row){ row.classList.remove('flash'); void row.offsetWidth; row.classList.add('flash'); }
-              speakWithRetry(d.nome, d.sala);
-            }
-          }
-        }
-      } else {
-        initializedCallsRef.current = true;
+  // Gatilho universal de anúncio: config/announce (funciona para CALL e RECALL)
+  useEffect(() => {
+    const unsub = onSnapshot(doc(db,'config','announce'), (snap) => {
+      if (!snap.exists()) return;
+      const d = snap.data();
+      const nonce = String(d.nonce || '');
+      if (!initAnnounceRef.current) { // primeira carga não fala
+        initAnnounceRef.current = true;
+        lastNonceRef.current = nonce;
+        return;
+      }
+      if (nonce && nonce !== lastNonceRef.current) {
+        lastNonceRef.current = nonce;
+        speakWithRetry(d.nome, d.sala);
+        // brilho visual (sem mexer no histórico)
+        const row = document.querySelector('.current-call');
+        if (row){ row.classList.remove('flash'); void row.offsetWidth; row.classList.add('flash'); }
       }
     });
     return () => unsub();
@@ -78,7 +84,7 @@ export default function TV(){
         applyConfig(snap.data());
       }
     });
-    const unsubColForSettings = onSnapshot(collection(db,'config'), (snap) => {
+    const unsubCol = onSnapshot(collection(db,'config'), (snap) => {
       if (usedMain) return;
       if (!snap.empty) {
         applyConfig(snap.docs[0].data());
@@ -95,11 +101,9 @@ export default function TV(){
         accentColor: data.accentColor || '#44b2e7',
       };
       applyAccent(cfg.accentColor);
-      if (typeof window !== 'undefined') {
-        window.tvConfig = { ...cfg };
-      }
+      if (typeof window !== 'undefined') window.tvConfig = { ...cfg };
     }
-    return () => { unsubMain(); unsubColForSettings(); };
+    return () => { unsubMain(); unsubCol(); };
   }, []);
 
   // videoId (de qualquer doc da coleção config)
@@ -108,9 +112,7 @@ export default function TV(){
       let vid = '';
       snap.forEach(docSnap => {
         const data = docSnap.data();
-        if (!vid && data && data.videoId) {
-          vid = String(data.videoId);
-        }
+        if (!vid && data && data.videoId) vid = String(data.videoId);
       });
       setVideoId(vid);
     });
