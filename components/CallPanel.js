@@ -1,5 +1,5 @@
-// components/CallPanel.js — chamar, REchamar, limpar histórico, consultório com select — 2025-08-15
-import { useEffect, useMemo, useState } from "react";
+// components/CallPanel.js — REchamar via coleção 'recalls' (não polui histórico) — 2025-08-15
+import { useEffect, useState } from "react";
 import { db } from "../utils/firebase";
 import {
   collection,
@@ -15,7 +15,7 @@ import {
   doc as docRef
 } from "firebase/firestore";
 
-const ROOMS = ["1", "2", "3"]; // Opções fixas: Consultório 1, 2 e 3
+const ROOMS = ["1", "2", "3"]; // Consultório 1/2/3
 
 export default function CallPanel(){
   const [name, setName] = useState("");
@@ -70,16 +70,29 @@ export default function CallPanel(){
     await callNow(name, room);
   }
 
+  // RECHAMAR: cria doc em 'recalls' (para a TV falar) sem mexer no histórico
+  async function createRecall(n, r){
+    try {
+      await addDoc(collection(db, "recalls"), {
+        nome: n,
+        sala: r,
+        timestamp: serverTimestamp(),
+      });
+    } catch (e) {
+      alert("Erro ao rechamar. Verifique permissões de escrita na coleção 'recalls'.");
+    }
+  }
+
   async function handleRecallLast(){
     if (!list.length) return;
     const last = list[0]; // último real
-    await callNow(last.nome, String(last.sala || ""), { recall: true });
+    await createRecall(String(last.nome || ""), String(last.sala || ""));
   }
 
   async function handleRecall(id){
     const item = list.find(x => x.id === id);
     if (!item) return;
-    await callNow(item.nome, String(item.sala || ""), { recall: true });
+    await createRecall(String(item.nome || ""), String(item.sala || ""));
   }
 
   // limpeza de hoje
@@ -153,7 +166,7 @@ export default function CallPanel(){
         </div>
 
         <div style={row}>
-          <button onClick={handleRecallLast} disabled={!list.length || busy} style={btnRecall}>
+          <button onClick={handleRecallLast} disabled={!list.length} style={btnRecall}>
             Rechamar último
           </button>
           <span style={{opacity:.8,fontSize:12}}>O próximo chamado mantém o mesmo consultório por padrão.</span>
@@ -164,13 +177,11 @@ export default function CallPanel(){
         <div style={{ fontWeight:800, marginBottom:8 }}>Últimos chamados</div>
         <div style={listWrap}>
           {list.length ? list.map((it)=> (
-            <div key={it.id} style={{display:"grid", gridTemplateColumns:"1fr auto auto", gap:8, alignItems:"center"}}>
+            <div key={it.id} style={{display:"grid", gridTemplateColumns:"1fr auto", gap:8, alignItems:"center"}}>
               <div>
                 <b>{it.nome}</b> — Consultório {String(it.sala || "")}
-                {it.recall ? <span style={{marginLeft:8, fontSize:12, opacity:.7}}>(rechamado)</span> : null}
               </div>
               <button onClick={()=>handleRecall(it.id)} style={btnRecall}>Rechamar</button>
-              {/* poderíamos ter um botão excluir individual no futuro */}
             </div>
           )) : <div style={{opacity:.7}}>Ainda não há chamados.</div>}
         </div>
