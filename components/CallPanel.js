@@ -1,4 +1,4 @@
-// components/CallPanel.js — REchamar em 'calls' com recall:true (não polui histórico)
+// components/CallPanel.js — chama/REchama disparando config/announce (não polui histórico)
 // 2025-08-15
 import { useEffect, useState } from "react";
 import { db } from "../utils/firebase";
@@ -13,14 +13,15 @@ import {
   getDocs,
   where,
   deleteDoc,
-  doc as docRef
+  doc as docRef,
+  setDoc,
 } from "firebase/firestore";
 
 const ROOMS = ["1", "2", "3"]; // Consultório 1/2/3
 
 export default function CallPanel(){
   const [name, setName] = useState("");
-  const [room, setRoom] = useState(ROOMS[0]); // default
+  const [room, setRoom] = useState(ROOMS[0]);
   const [busy, setBusy] = useState(false);
   const [list, setList] = useState([]); // últimos chamados (reais)
 
@@ -38,11 +39,29 @@ export default function CallPanel(){
     const unsub = onSnapshot(q, (snap) => {
       const items = snap.docs
         .map((d) => ({ id: d.id, ...d.data() }))
-        .filter((x) => !x.test); // (recall aparece aqui mas a TV filtra na exibição)
+        .filter((x) => !x.test); // a TV filtra recall na exibição; aqui mostramos todos
       setList(items);
     });
     return () => unsub();
   }, []);
+
+  // dispara o gatilho de anúncio que a TV escuta
+  async function fireAnnounce(nome, sala){
+    try {
+      await setDoc(
+        docRef(db, "config", "announce"),
+        {
+          nome: String(nome || ""),
+          sala: String(sala || ""),
+          triggeredAt: serverTimestamp(),
+          nonce: Date.now() + "-" + Math.random().toString(36).slice(2), // sempre muda
+        },
+        { merge: true }
+      );
+    } catch (e) {
+      alert("Erro ao acionar anúncio. Verifique permissão de escrita em config/announce.");
+    }
+  }
 
   async function callNow(n, r, extra = {}){
     const nome = (n || "").trim();
@@ -50,12 +69,16 @@ export default function CallPanel(){
     if (!nome) return;
     setBusy(true);
     try {
+      // grava no histórico
       await addDoc(collection(db, "calls"), {
         nome,
         sala,
         timestamp: serverTimestamp(),
-        ...extra, // ex.: { recall:true }
+        ...extra, // ex.: { recall:true } — NÃO usamos para rechamar
       });
+      // dispara o anúncio (garante áudio na TV)
+      await fireAnnounce(nome, sala);
+
       // guarda consultório para a próxima chamada
       try { localStorage.setItem("last_consultorio", sala); } catch {}
       setRoom(sala);
@@ -71,17 +94,17 @@ export default function CallPanel(){
     await callNow(name, room);
   }
 
-  // RECHAMAR: cria um novo doc em 'calls' com recall:true (TV não mostra no histórico)
+  // RECHAMAR: só dispara o anúncio; não grava nada novo no histórico
   async function handleRecallLast(){
     if (!list.length) return;
     const last = list[0]; // último real
-    await callNow(String(last.nome || ""), String(last.sala || ""), { recall: true });
+    await fireAnnounce(String(last.nome || ""), String(last.sala || ""));
   }
 
   async function handleRecall(id){
     const item = list.find(x => x.id === id);
     if (!item) return;
-    await callNow(String(item.nome || ""), String(item.sala || ""), { recall: true });
+    await fireAnnounce(String(item.nome || ""), String(item.sala || ""));
   }
 
   // limpeza de hoje
