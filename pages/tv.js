@@ -1,4 +1,4 @@
-// pages/tv.js — anuncia também em REchamar (compara pelo ID do chamado)
+// pages/tv.js — ouve 'calls' (histórico) e 'recalls' (som sem poluir)
 import Head from 'next/head';
 import Script from 'next/script';
 import { useEffect, useRef, useState } from 'react';
@@ -16,22 +16,54 @@ export default function TV(){
   const [videoId, setVideoId] = useState('');
   const [currentName, setCurrentName] = useState('—');
   const [currentSala, setCurrentSala] = useState('');
-  const [currentKey, setCurrentKey] = useState(''); // <- chave única do chamado (id)
-  const lastAnnouncedKeyRef = useRef('');           // <- último id anunciado
+  const initializedCallsRef = useRef(false);
+  const initializedRecallsRef = useRef(false);
 
-  // Assina chamadas (pega 5, filtra test)
+  // Assina chamadas (pega 5, filtra test) — atualiza UI e anuncia ADDED
   useEffect(() => {
     const qCalls = query(collection(db, 'calls'), orderBy('timestamp', 'desc'), limit(5));
     const unsub = onSnapshot(qCalls, (snap) => {
       const raw = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      const list = raw.filter(x => !x.test); // ignora testes
+      const list = raw.filter(x => !x.test);
       setHistory(list);
       if (list.length) {
-        const top = list[0];
-        const { nome, sala } = top || {};
+        const { nome, sala } = list[0] || {};
         if (nome) setCurrentName(String(nome));
         if (sala != null) setCurrentSala(String(sala));
-        setCurrentKey(String(top.id)); // <- muda a chave quando é REchamado (novo doc)
+      }
+      if (initializedCallsRef.current) {
+        const changes = snap.docChanges();
+        for (const ch of changes) {
+          if (ch.type === 'added') {
+            const d = ch.doc.data();
+            if (!d?.test && typeof window !== 'undefined' && typeof window.tvAnnounce === 'function') {
+              window.tvAnnounce(String(d.nome || ''), d.sala != null ? String(d.sala) : '');
+            }
+          }
+        }
+      } else {
+        initializedCallsRef.current = true;
+      }
+    });
+    return () => unsub();
+  }, []);
+
+  // Assina RECALLS (somente som, sem alterar UI)
+  useEffect(() => {
+    const qRecalls = query(collection(db, 'recalls'), orderBy('timestamp', 'desc'), limit(10));
+    const unsub = onSnapshot(qRecalls, (snap) => {
+      if (initializedRecallsRef.current) {
+        const changes = snap.docChanges();
+        for (const ch of changes) {
+          if (ch.type === 'added') {
+            const d = ch.doc.data();
+            if (typeof window !== 'undefined' && typeof window.tvAnnounce === 'function') {
+              window.tvAnnounce(String(d.nome || ''), d.sala != null ? String(d.sala) : '');
+            }
+          }
+        }
+      } else {
+        initializedRecallsRef.current = true;
       }
     });
     return () => unsub();
@@ -84,23 +116,6 @@ export default function TV(){
     });
     return () => unsubVid();
   }, []);
-
-  // Quando a CHAVE do chamado muda (novo doc), anuncia — mesmo se o nome for igual
-  useEffect(() => {
-    if (!currentKey) return;
-    const row = document.querySelector('.current-call');
-    if (row){ row.classList.remove('flash'); void row.offsetWidth; row.classList.add('flash'); }
-
-    if (typeof window !== 'undefined') {
-      if (lastAnnouncedKeyRef.current !== currentKey) {
-        lastAnnouncedKeyRef.current = currentKey;
-        if (typeof window.tvAnnounce === 'function') {
-          try { window.tvAnnounce(currentName, currentSala); } catch {}
-        }
-      }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentKey]); // <- dispara pelo ID, não pelo nome
 
   return (
     <div className="tv-screen">
