@@ -1,4 +1,4 @@
-// pages/tv.js — auto-IDLE após 2 min + logo em tela cheia do box + lista recente inteligente
+// pages/tv.js — usa idleSeconds (configurável) para auto-IDLE + logo
 import Head from 'next/head';
 import Script from 'next/script';
 import { useEffect, useRef, useState } from 'react';
@@ -10,7 +10,6 @@ import Carousel from '../components/Carousel';
 function applyAccent(color){
   try { document.documentElement.style.setProperty('--tv-accent', color || '#44b2e7'); } catch {}
 }
-
 function speakWithRetry(nome, sala, attempts = 8, delay = 350) {
   if (!nome) return;
   const call = () => {
@@ -31,9 +30,10 @@ export default function TV(){
   const [videoId, setVideoId] = useState('');
   const [currentName, setCurrentName] = useState('—');
   const [currentSala, setCurrentSala] = useState('');
-  const [forcedIdle, setForcedIdle] = useState(false);   // vindo do admin (clear histórico, etc.)
-  const [autoIdle, setAutoIdle] = useState(false);       // 2 minutos sem novo chamado
-  const [lastCallAt, setLastCallAt] = useState(null);    // ms
+  const [forcedIdle, setForcedIdle] = useState(false);
+  const [autoIdle, setAutoIdle] = useState(false);
+  const [lastCallAt, setLastCallAt] = useState(null);
+  const [idleSeconds, setIdleSeconds] = useState(120); // NOVO: vindo da config
   const initCallsRef = useRef(false);
   const initAnnounceRef = useRef(false);
   const lastNonceRef = useRef('');
@@ -68,17 +68,17 @@ export default function TV(){
     return () => unsub();
   }, []);
 
-  // Relógio do auto-IDLE (2 minutos)
+  // Relógio do auto-IDLE usando idleSeconds
   useEffect(() => {
     const check = () => {
       if (!lastCallAt) { setAutoIdle(false); return; }
       const diff = Date.now() - lastCallAt;
-      setAutoIdle(diff >= 120000); // 2 min
+      setAutoIdle(diff >= idleSeconds * 1000);
     };
     check();
-    const t = setInterval(check, 5000); // checa a cada 5s
+    const t = setInterval(check, 5000);
     return () => clearInterval(t);
-  }, [lastCallAt]);
+  }, [lastCallAt, idleSeconds]);
 
   // Gatilho universal de anúncio + modo ocioso (config/announce)
   useEffect(() => {
@@ -93,7 +93,7 @@ export default function TV(){
       } else {
         if (nonce && nonce !== lastNonceRef.current) {
           lastNonceRef.current = nonce;
-          if (d.idle === false) setForcedIdle(false); // sai do modo logo ao chamar/rechamar
+          if (d.idle === false) setForcedIdle(false);
           speakWithRetry(d.nome, d.sala);
           const row = document.querySelector('.current-call');
           if (row){ row.classList.remove('flash'); void row.offsetWidth; row.classList.add('flash'); }
@@ -108,7 +108,7 @@ export default function TV(){
     return () => unsub();
   }, []);
 
-  // Configurações (config/main -> fallback 1º doc)
+  // Configurações (config/main -> fallback 1º doc) — inclui idleSeconds
   useEffect(() => {
     let usedMain = false;
     const unsubMain = onSnapshot(doc(db,'config','main'), (snap) => {
@@ -132,8 +132,10 @@ export default function TV(){
         restoreVolume: Number.isFinite(data.restoreVolume) ? Number(data.restoreVolume) : 60,
         leadMs: Number.isFinite(data.leadMs) ? Number(data.leadMs) : 450,
         accentColor: data.accentColor || '#44b2e7',
+        idleSeconds: Number.isFinite(data.idleSeconds) ? Math.min(300, Math.max(60, Number(data.idleSeconds))) : 120,
       };
       applyAccent(cfg.accentColor);
+      setIdleSeconds(cfg.idleSeconds);                // NOVO
       if (typeof window !== 'undefined') window.tvConfig = { ...cfg };
     }
     return () => { unsubMain(); unsubCol(); };
@@ -152,9 +154,7 @@ export default function TV(){
     return () => unsubVid();
   }, []);
 
-  // Decide quais “recentes” mostrar:
-  // - quando NÃO idle: ignoramos o topo (mostramos índices 1..2)
-  // - quando idle: mostramos a partir do topo (0..1), incluindo o último chamado
+  // Decide quais “recentes” mostrar
   const recentItems = isIdle ? history.slice(0, 2) : history.slice(1, 3);
 
   return (
