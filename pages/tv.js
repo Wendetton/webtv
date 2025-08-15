@@ -1,4 +1,4 @@
-// pages/tv.js — modo ocioso: fundo branco ocupa todo o box “Chamando agora”
+// pages/tv.js — auto-IDLE após 2 min + logo em tela cheia do box + lista recente inteligente
 import Head from 'next/head';
 import Script from 'next/script';
 import { useEffect, useRef, useState } from 'react';
@@ -31,14 +31,16 @@ export default function TV(){
   const [videoId, setVideoId] = useState('');
   const [currentName, setCurrentName] = useState('—');
   const [currentSala, setCurrentSala] = useState('');
-  const [forcedIdle, setForcedIdle] = useState(false);
+  const [forcedIdle, setForcedIdle] = useState(false);   // vindo do admin (clear histórico, etc.)
+  const [autoIdle, setAutoIdle] = useState(false);       // 2 minutos sem novo chamado
+  const [lastCallAt, setLastCallAt] = useState(null);    // ms
   const initCallsRef = useRef(false);
   const initAnnounceRef = useRef(false);
   const lastNonceRef = useRef('');
 
-  const isIdle = forcedIdle || history.length === 0;
+  const isIdle = forcedIdle || autoIdle || history.length === 0;
 
-  // Histórico e “Chamando agora”
+  // Histórico + "Chamando agora"
   useEffect(() => {
     const qCalls = query(collection(db, 'calls'), orderBy('timestamp', 'desc'), limit(5));
     const unsub = onSnapshot(qCalls, (snap) => {
@@ -47,18 +49,36 @@ export default function TV(){
       setHistory(list);
 
       if (list.length) {
-        const { nome, sala } = list[0] || {};
+        const top = list[0] || {};
+        const { nome, sala, timestamp } = top;
         setCurrentName(nome ? String(nome) : '—');
         setCurrentSala(sala != null ? String(sala) : '');
+        const ts = timestamp && typeof timestamp.toMillis === 'function'
+          ? timestamp.toMillis()
+          : (timestamp?.seconds ? timestamp.seconds * 1000 : null);
+        setLastCallAt(ts);
       } else {
         setCurrentName('');
         setCurrentSala('');
+        setLastCallAt(null);
       }
 
       if (!initCallsRef.current) initCallsRef.current = true;
     });
     return () => unsub();
   }, []);
+
+  // Relógio do auto-IDLE (2 minutos)
+  useEffect(() => {
+    const check = () => {
+      if (!lastCallAt) { setAutoIdle(false); return; }
+      const diff = Date.now() - lastCallAt;
+      setAutoIdle(diff >= 120000); // 2 min
+    };
+    check();
+    const t = setInterval(check, 5000); // checa a cada 5s
+    return () => clearInterval(t);
+  }, [lastCallAt]);
 
   // Gatilho universal de anúncio + modo ocioso (config/announce)
   useEffect(() => {
@@ -73,7 +93,7 @@ export default function TV(){
       } else {
         if (nonce && nonce !== lastNonceRef.current) {
           lastNonceRef.current = nonce;
-          if (d.idle === false) setForcedIdle(false);
+          if (d.idle === false) setForcedIdle(false); // sai do modo logo ao chamar/rechamar
           speakWithRetry(d.nome, d.sala);
           const row = document.querySelector('.current-call');
           if (row){ row.classList.remove('flash'); void row.offsetWidth; row.classList.add('flash'); }
@@ -132,6 +152,11 @@ export default function TV(){
     return () => unsubVid();
   }, []);
 
+  // Decide quais “recentes” mostrar:
+  // - quando NÃO idle: ignoramos o topo (mostramos índices 1..2)
+  // - quando idle: mostramos a partir do topo (0..1), incluindo o último chamado
+  const recentItems = isIdle ? history.slice(0, 2) : history.slice(1, 3);
+
   return (
     <div className="tv-screen">
       <Head>
@@ -155,10 +180,9 @@ export default function TV(){
       </div>
 
       <div className="tv-footer">
-        {/* 2 últimos (exclui atual) */}
         <div className="called-list">
-          {history.slice(1, 3).length ? (
-            history.slice(1, 3).map((h, i) => (
+          {recentItems.length ? (
+            recentItems.map((h, i) => (
               <span key={i} className="called-chip">
                 {h.nome} — Consultório {h.sala}
               </span>
@@ -183,16 +207,13 @@ export default function TV(){
 
       <Script src="/tv-ducking.js" strategy="afterInteractive" />
 
-      {/* estilos: fundo branco ocupa TODO o box; logo centralizada e contida */}
       <style jsx global>{`
         .current-call.idle.idle-full {
           display: flex;
           align-items: center;
           justify-content: center;
           background: #ffffff;
-          /* mantém cantos iguais ao estilo do box original */
           border-radius: inherit;
-          /* reforça uma linha sutil para destacar do fundo da página */
           box-shadow: inset 0 0 0 1px rgba(0,0,0,.06), 0 10px 28px rgba(0,0,0,.08);
           transition: background .25s ease, box-shadow .25s ease;
         }
