@@ -6,6 +6,7 @@ import YoutubeConfig from "../components/YoutubeConfig";
 import PatientHistory from "../components/PatientHistory";
 import PatientCall from "../components/PatientCall";
 import ImageUploader from "../components/ImageUploader"; // Importação do novo componente
+import CallPanel from "../components/CallPanel";
 
 export default function Admin() {
   // Estados do painel
