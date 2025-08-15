@@ -1,4 +1,5 @@
-// components/CallPanel.js — dispara idle:true após limpar histórico (TV mostra logo)
+// components/CallPanel.js — Chamadas + Rechamar + Limpar + Status na TV + idle/logo
+// 2025-08-15
 import { useEffect, useState } from "react";
 import { db } from "../utils/firebase";
 import {
@@ -12,18 +13,20 @@ import {
   getDocs,
   where,
   deleteDoc,
-  doc as docRef,
+  doc,
   setDoc,
 } from "firebase/firestore";
 
 const ROOMS = ["1", "2", "3"]; // Consultório 1/2/3
 
 export default function CallPanel(){
+  // ===== Chamadas =====
   const [name, setName] = useState("");
   const [room, setRoom] = useState(ROOMS[0]);
   const [busy, setBusy] = useState(false);
-  const [list, setList] = useState([]);
+  const [list, setList] = useState([]); // últimos chamados (reais)
 
+  // restaura último consultório utilizado
   useEffect(() => {
     try {
       const last = localStorage.getItem("last_consultorio");
@@ -31,6 +34,7 @@ export default function CallPanel(){
     } catch {}
   }, []);
 
+  // assina os últimos 8 chamados (exclui testes)
   useEffect(() => {
     const q = query(collection(db, "calls"), orderBy("timestamp", "desc"), limit(8));
     const unsub = onSnapshot(q, (snap) => {
@@ -42,16 +46,17 @@ export default function CallPanel(){
     return () => unsub();
   }, []);
 
+  // dispara o gatilho universal de anúncio que a TV escuta (config/announce)
   async function fireAnnounce(nome, sala, idle = false){
     try {
       await setDoc(
-        docRef(db, "config", "announce"),
+        doc(db, "config", "announce"),
         {
           nome: String(nome || ""),
           sala: String(sala || ""),
           idle, // true → TV mostra logo ; false → TV sai do logo
           triggeredAt: serverTimestamp(),
-          nonce: Date.now() + "-" + Math.random().toString(36).slice(2),
+          nonce: Date.now() + "-" + Math.random().toString(36).slice(2), // sempre muda
         },
         { merge: true }
       );
@@ -66,12 +71,16 @@ export default function CallPanel(){
     if (!nome) return;
     setBusy(true);
     try {
+      // grava no histórico
       await addDoc(collection(db, "calls"), {
         nome,
         sala,
         timestamp: serverTimestamp(),
       });
-      await fireAnnounce(nome, sala, false); // garante saída do modo logo
+      // garante que a TV saia do modo logo e anuncie
+      await fireAnnounce(nome, sala, false);
+
+      // guarda consultório para a próxima chamada
       try { localStorage.setItem("last_consultorio", sala); } catch {}
       setRoom(sala);
       setName("");
@@ -84,22 +93,23 @@ export default function CallPanel(){
 
   async function handleCall(){ await callNow(name, room); }
 
+  // RECHAMAR: só dispara o anúncio; não cria nova linha no histórico
   async function handleRecallLast(){
     if (!list.length) return;
     const last = list[0];
     await fireAnnounce(String(last.nome || ""), String(last.sala || ""), false);
   }
-
   async function handleRecall(id){
     const item = list.find(x => x.id === id);
     if (!item) return;
     await fireAnnounce(String(item.nome || ""), String(item.sala || ""), false);
   }
 
+  // ===== Limpeza de histórico (e força TV em logo) =====
   async function clearToday(){
     if (!confirm("Limpar histórico de HOJE? Isso não pode ser desfeito.")) return;
     const now = new Date();
-    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate()); // 00:00 local
     try {
       const q = query(
         collection(db, "calls"),
@@ -108,7 +118,7 @@ export default function CallPanel(){
         limit(200)
       );
       const snaps = await getDocs(q);
-      await Promise.all(snaps.docs.map(d => deleteDoc(docRef(db,"calls",d.id))));
+      await Promise.all(snaps.docs.map(d => deleteDoc(doc(db,"calls",d.id))));
       await fireAnnounce("", "", true); // força logo na TV
       alert("Histórico de hoje limpo.");
     } catch (e) {
@@ -121,7 +131,7 @@ export default function CallPanel(){
     try {
       const q = query(collection(db, "calls"), orderBy("timestamp", "desc"), limit(200));
       const snaps = await getDocs(q);
-      await Promise.all(snaps.docs.map(d => deleteDoc(docRef(db,"calls",d.id))));
+      await Promise.all(snaps.docs.map(d => deleteDoc(doc(db,"calls",d.id))));
       await fireAnnounce("", "", true); // força logo na TV
       alert("Histórico limpo (até 200 registros).");
     } catch (e) {
@@ -129,7 +139,58 @@ export default function CallPanel(){
     }
   }
 
-  // estilos (mantidos)
+  // ====== STATUS que espelha a TV ======
+  const [tvHistory, setTvHistory] = useState([]);
+  const [tvForcedIdle, setTvForcedIdle] = useState(false);
+  const [tvLastCallAt, setTvLastCallAt] = useState(null);
+  const [tvAutoIdle, setTvAutoIdle] = useState(false);
+
+  // mesmos 5 docs da TV
+  useEffect(() => {
+    const q = query(collection(db, "calls"), orderBy("timestamp", "desc"), limit(5));
+    const unsub = onSnapshot(q, (snap) => {
+      const raw = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const list = raw.filter(x => !x.test && !x.recall);
+      setTvHistory(list);
+      if (list.length) {
+        const t = list[0].timestamp;
+        const ms = t && typeof t.toMillis === "function" ? t.toMillis() : (t?.seconds ? t.seconds * 1000 : null);
+        setTvLastCallAt(ms);
+      } else {
+        setTvLastCallAt(null);
+      }
+    });
+    return () => unsub();
+  }, []);
+
+  // escuta o announce para saber se está idle forçado
+  useEffect(() => {
+    const unsub = onSnapshot(doc(db, "config", "announce"), (snap) => {
+      if (!snap.exists()) return;
+      const d = snap.data() || {};
+      if (typeof d.idle === "boolean") setTvForcedIdle(Boolean(d.idle));
+    });
+    return () => unsub();
+  }, []);
+
+  // calcula auto-idle (2 minutos)
+  useEffect(() => {
+    const tick = () => {
+      if (!tvLastCallAt) { setTvAutoIdle(false); return; }
+      setTvAutoIdle(Date.now() - tvLastCallAt >= 120000);
+    };
+    tick();
+    const t = setInterval(tick, 5000);
+    return () => clearInterval(t);
+  }, [tvLastCallAt]);
+
+  const tvIsIdle = tvForcedIdle || tvAutoIdle || tvHistory.length === 0;
+  const tvNow = tvIsIdle
+    ? "— (Logo exibida)"
+    : (tvHistory[0]?.nome ? `${tvHistory[0].nome} — Consultório ${tvHistory[0].sala}` : "—");
+  const tvRecent = tvIsIdle ? tvHistory.slice(0,2) : tvHistory.slice(1,3);
+
+  // ===== estilos =====
   const card = { marginTop: 24, border: "1px solid rgba(255,255,255,0.12)", borderRadius: 12, overflow: "hidden" };
   const header = { padding: "12px 14px", fontSize: 18, fontWeight: 800, background: "rgba(255,255,255,0.04)" };
   const body = { padding: 16 };
@@ -146,34 +207,73 @@ export default function CallPanel(){
     <section style={card}>
       <div style={header}>Chamadas (Consultório)</div>
       <div style={body}>
+        {/* Linha de chamada */}
         <div style={grid}>
-          <input placeholder="Nome do paciente" value={name} onChange={e=>setName(e.target.value)} style={input} />
+          <input
+            placeholder="Nome do paciente"
+            value={name}
+            onChange={e=>setName(e.target.value)}
+            style={input}
+          />
           <select value={room} onChange={e=>setRoom(e.target.value)} style={sel}>
-            {ROOMS.map(r => (<option key={r} value={r}>{`Consultório ${r}`}</option>))}
+            {ROOMS.map(r => (
+              <option key={r} value={r}>{`Consultório ${r}`}</option>
+            ))}
           </select>
           <button onClick={handleCall} disabled={busy || !name.trim()} style={btn}>
             {busy ? "Chamando..." : "Chamar paciente"}
           </button>
         </div>
 
+        {/* Rechamar último */}
         <div style={row}>
-          <button onClick={handleRecallLast} disabled={!list.length} style={btnRecall}>Rechamar último</button>
+          <button onClick={handleRecallLast} disabled={!list.length} style={btnRecall}>
+            Rechamar último
+          </button>
           <span style={{opacity:.8,fontSize:12}}>O próximo chamado mantém o mesmo consultório por padrão.</span>
         </div>
 
         <hr style={{ margin:"14px 0", border:"none", borderTop:"1px solid rgba(255,255,255,0.12)" }} />
 
+        {/* ===== Status na TV ===== */}
+        <div style={{
+          margin: "0 0 16px",
+          padding: "12px 14px",
+          border: "1px solid rgba(255,255,255,0.12)",
+          borderRadius: 10,
+          background: "rgba(255,255,255,0.04)"
+        }}>
+          <div style={{fontWeight: 800, marginBottom: 6}}>Status na TV</div>
+          <div style={{opacity:.95, display:"grid", gap:6}}>
+            <div><b>Chamando agora:</b> {tvNow}</div>
+            <div>
+              <b>Chamados recentes:</b>{" "}
+              {tvRecent.length
+                ? tvRecent.map((h,i) => `${h.nome} — Consultório ${h.sala}`).join(" · ")
+                : "—"}
+            </div>
+          </div>
+          <div style={{marginTop:6, fontSize:12, opacity:.7}}>
+            {tvIsIdle ? "Modo logo (sem paciente sendo exibido)" : "Exibindo paciente em chamada"}
+          </div>
+        </div>
+
+        {/* Lista de últimos chamados (reais) com Rechamar */}
         <div style={{ fontWeight:800, marginBottom:8 }}>Últimos chamados</div>
         <div style={listWrap}>
           {list.length ? list.map((it)=> (
             <div key={it.id} style={{display:"grid", gridTemplateColumns:"1fr auto", gap:8, alignItems:"center"}}>
-              <div><b>{it.nome}</b> — Consultório {String(it.sala || "")}</div>
+              <div>
+                <b>{it.nome}</b> — Consultório {String(it.sala || "")}
+              </div>
               <button onClick={()=>handleRecall(it.id)} style={btnRecall}>Rechamar</button>
             </div>
           )) : <div style={{opacity:.7}}>Ainda não há chamados.</div>}
         </div>
 
         <hr style={{ margin:"14px 0", border:"none", borderTop:"1px solid rgba(255,255,255,0.12)" }} />
+
+        {/* Limpar histórico */}
         <div style={row}>
           <button onClick={clearToday} style={btnDanger}>Limpar histórico de HOJE</button>
           <button onClick={clearAll} style={{...btnDanger, background:"#b91c1c"}}>Limpar TUDO (máx. 200)</button>
