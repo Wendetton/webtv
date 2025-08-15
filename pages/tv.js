@@ -1,4 +1,4 @@
-// pages/tv.js — apenas ajusta o label para "Consultório" (mantém resto como está)
+// pages/tv.js — anuncia também em REchamar (compara pelo ID do chamado)
 import Head from 'next/head';
 import Script from 'next/script';
 import { useEffect, useRef, useState } from 'react';
@@ -16,23 +16,28 @@ export default function TV(){
   const [videoId, setVideoId] = useState('');
   const [currentName, setCurrentName] = useState('—');
   const [currentSala, setCurrentSala] = useState('');
-  const lastAnnouncedRef = useRef('');
+  const [currentKey, setCurrentKey] = useState(''); // <- chave única do chamado (id)
+  const lastAnnouncedKeyRef = useRef('');           // <- último id anunciado
 
+  // Assina chamadas (pega 5, filtra test)
   useEffect(() => {
     const qCalls = query(collection(db, 'calls'), orderBy('timestamp', 'desc'), limit(5));
     const unsub = onSnapshot(qCalls, (snap) => {
       const raw = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      const list = raw.filter(x => !x.test);
+      const list = raw.filter(x => !x.test); // ignora testes
       setHistory(list);
       if (list.length) {
-        const { nome, sala } = list[0] || {};
+        const top = list[0];
+        const { nome, sala } = top || {};
         if (nome) setCurrentName(String(nome));
         if (sala != null) setCurrentSala(String(sala));
+        setCurrentKey(String(top.id)); // <- muda a chave quando é REchamado (novo doc)
       }
     });
     return () => unsub();
   }, []);
 
+  // Assina configurações (config/main -> fallback 1º doc)
   useEffect(() => {
     let usedMain = false;
     const unsubMain = onSnapshot(doc(db,'config','main'), (snap) => {
@@ -65,6 +70,7 @@ export default function TV(){
     return () => { unsubMain(); unsubColForSettings(); };
   }, []);
 
+  // Assina o videoId separadamente (pega de qualquer doc em 'config')
   useEffect(() => {
     const unsubVid = onSnapshot(collection(db,'config'), (snap) => {
       let vid = '';
@@ -79,19 +85,22 @@ export default function TV(){
     return () => unsubVid();
   }, []);
 
+  // Quando a CHAVE do chamado muda (novo doc), anuncia — mesmo se o nome for igual
   useEffect(() => {
-    if (!currentName || currentName === '—') return;
+    if (!currentKey) return;
     const row = document.querySelector('.current-call');
     if (row){ row.classList.remove('flash'); void row.offsetWidth; row.classList.add('flash'); }
+
     if (typeof window !== 'undefined') {
-      if (lastAnnouncedRef.current !== currentName) {
-        lastAnnouncedRef.current = currentName;
+      if (lastAnnouncedKeyRef.current !== currentKey) {
+        lastAnnouncedKeyRef.current = currentKey;
         if (typeof window.tvAnnounce === 'function') {
           try { window.tvAnnounce(currentName, currentSala); } catch {}
         }
       }
     }
-  }, [currentName, currentSala]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentKey]); // <- dispara pelo ID, não pelo nome
 
   return (
     <div className="tv-screen">
@@ -116,10 +125,13 @@ export default function TV(){
       </div>
 
       <div className="tv-footer">
+        {/* 2 últimos (exclui atual) */}
         <div className="called-list">
           {history.slice(1, 3).length ? (
             history.slice(1, 3).map((h, i) => (
-              <span key={i} className="called-chip">{h.nome} — Consultório {h.sala}</span>
+              <span key={i} className="called-chip">
+                {h.nome} — Consultório {h.sala}
+              </span>
             ))
           ) : (
             <span className="muted">Sem chamados recentes…</span>
