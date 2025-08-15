@@ -1,5 +1,4 @@
-// components/CallPanel.js — chama/REchama disparando config/announce (não polui histórico)
-// 2025-08-15
+// components/CallPanel.js — dispara idle:true após limpar histórico (TV mostra logo)
 import { useEffect, useState } from "react";
 import { db } from "../utils/firebase";
 import {
@@ -23,9 +22,8 @@ export default function CallPanel(){
   const [name, setName] = useState("");
   const [room, setRoom] = useState(ROOMS[0]);
   const [busy, setBusy] = useState(false);
-  const [list, setList] = useState([]); // últimos chamados (reais)
+  const [list, setList] = useState([]);
 
-  // restaura último consultório utilizado
   useEffect(() => {
     try {
       const last = localStorage.getItem("last_consultorio");
@@ -33,53 +31,47 @@ export default function CallPanel(){
     } catch {}
   }, []);
 
-  // assina os últimos 8 chamados (exclui testes)
   useEffect(() => {
     const q = query(collection(db, "calls"), orderBy("timestamp", "desc"), limit(8));
     const unsub = onSnapshot(q, (snap) => {
       const items = snap.docs
         .map((d) => ({ id: d.id, ...d.data() }))
-        .filter((x) => !x.test); // a TV filtra recall na exibição; aqui mostramos todos
+        .filter((x) => !x.test);
       setList(items);
     });
     return () => unsub();
   }, []);
 
-  // dispara o gatilho de anúncio que a TV escuta
-  async function fireAnnounce(nome, sala){
+  async function fireAnnounce(nome, sala, idle = false){
     try {
       await setDoc(
         docRef(db, "config", "announce"),
         {
           nome: String(nome || ""),
           sala: String(sala || ""),
+          idle, // true → TV mostra logo ; false → TV sai do logo
           triggeredAt: serverTimestamp(),
-          nonce: Date.now() + "-" + Math.random().toString(36).slice(2), // sempre muda
+          nonce: Date.now() + "-" + Math.random().toString(36).slice(2),
         },
         { merge: true }
       );
-    } catch (e) {
-      alert("Erro ao acionar anúncio. Verifique permissão de escrita em config/announce.");
+    } catch {
+      // silencioso para não travar sua operação
     }
   }
 
-  async function callNow(n, r, extra = {}){
+  async function callNow(n, r){
     const nome = (n || "").trim();
     const sala = (r || "").trim();
     if (!nome) return;
     setBusy(true);
     try {
-      // grava no histórico
       await addDoc(collection(db, "calls"), {
         nome,
         sala,
         timestamp: serverTimestamp(),
-        ...extra, // ex.: { recall:true } — NÃO usamos para rechamar
       });
-      // dispara o anúncio (garante áudio na TV)
-      await fireAnnounce(nome, sala);
-
-      // guarda consultório para a próxima chamada
+      await fireAnnounce(nome, sala, false); // garante saída do modo logo
       try { localStorage.setItem("last_consultorio", sala); } catch {}
       setRoom(sala);
       setName("");
@@ -90,28 +82,24 @@ export default function CallPanel(){
     }
   }
 
-  async function handleCall(){
-    await callNow(name, room);
-  }
+  async function handleCall(){ await callNow(name, room); }
 
-  // RECHAMAR: só dispara o anúncio; não grava nada novo no histórico
   async function handleRecallLast(){
     if (!list.length) return;
-    const last = list[0]; // último real
-    await fireAnnounce(String(last.nome || ""), String(last.sala || ""));
+    const last = list[0];
+    await fireAnnounce(String(last.nome || ""), String(last.sala || ""), false);
   }
 
   async function handleRecall(id){
     const item = list.find(x => x.id === id);
     if (!item) return;
-    await fireAnnounce(String(item.nome || ""), String(item.sala || ""));
+    await fireAnnounce(String(item.nome || ""), String(item.sala || ""), false);
   }
 
-  // limpeza de hoje
   async function clearToday(){
     if (!confirm("Limpar histórico de HOJE? Isso não pode ser desfeito.")) return;
     const now = new Date();
-    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate()); // 00:00 local
+    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     try {
       const q = query(
         collection(db, "calls"),
@@ -120,29 +108,28 @@ export default function CallPanel(){
         limit(200)
       );
       const snaps = await getDocs(q);
-      const ids = snaps.docs.map(d => d.id);
-      await Promise.all(ids.map(id => deleteDoc(docRef(db,"calls",id))));
+      await Promise.all(snaps.docs.map(d => deleteDoc(docRef(db,"calls",d.id))));
+      await fireAnnounce("", "", true); // força logo na TV
       alert("Histórico de hoje limpo.");
     } catch (e) {
       alert("Não foi possível limpar (verifique permissões do Firestore).");
     }
   }
 
-  // limpeza total (limitada)
   async function clearAll(){
     if (!confirm("Limpar TODO o histórico (até 200 registros)?")) return;
     try {
       const q = query(collection(db, "calls"), orderBy("timestamp", "desc"), limit(200));
       const snaps = await getDocs(q);
-      const ids = snaps.docs.map(d => d.id);
-      await Promise.all(ids.map(id => deleteDoc(docRef(db,"calls",id))));
+      await Promise.all(snaps.docs.map(d => deleteDoc(docRef(db,"calls",d.id))));
+      await fireAnnounce("", "", true); // força logo na TV
       alert("Histórico limpo (até 200 registros).");
     } catch (e) {
       alert("Não foi possível limpar (verifique permissões do Firestore).");
     }
   }
 
-  // estilos
+  // estilos (mantidos)
   const card = { marginTop: 24, border: "1px solid rgba(255,255,255,0.12)", borderRadius: 12, overflow: "hidden" };
   const header = { padding: "12px 14px", fontSize: 18, fontWeight: 800, background: "rgba(255,255,255,0.04)" };
   const body = { padding: 16 };
@@ -160,16 +147,9 @@ export default function CallPanel(){
       <div style={header}>Chamadas (Consultório)</div>
       <div style={body}>
         <div style={grid}>
-          <input
-            placeholder="Nome do paciente"
-            value={name}
-            onChange={e=>setName(e.target.value)}
-            style={input}
-          />
+          <input placeholder="Nome do paciente" value={name} onChange={e=>setName(e.target.value)} style={input} />
           <select value={room} onChange={e=>setRoom(e.target.value)} style={sel}>
-            {ROOMS.map(r => (
-              <option key={r} value={r}>{`Consultório ${r}`}</option>
-            ))}
+            {ROOMS.map(r => (<option key={r} value={r}>{`Consultório ${r}`}</option>))}
           </select>
           <button onClick={handleCall} disabled={busy || !name.trim()} style={btn}>
             {busy ? "Chamando..." : "Chamar paciente"}
@@ -177,9 +157,7 @@ export default function CallPanel(){
         </div>
 
         <div style={row}>
-          <button onClick={handleRecallLast} disabled={!list.length} style={btnRecall}>
-            Rechamar último
-          </button>
+          <button onClick={handleRecallLast} disabled={!list.length} style={btnRecall}>Rechamar último</button>
           <span style={{opacity:.8,fontSize:12}}>O próximo chamado mantém o mesmo consultório por padrão.</span>
         </div>
 
@@ -189,16 +167,13 @@ export default function CallPanel(){
         <div style={listWrap}>
           {list.length ? list.map((it)=> (
             <div key={it.id} style={{display:"grid", gridTemplateColumns:"1fr auto", gap:8, alignItems:"center"}}>
-              <div>
-                <b>{it.nome}</b> — Consultório {String(it.sala || "")}
-              </div>
+              <div><b>{it.nome}</b> — Consultório {String(it.sala || "")}</div>
               <button onClick={()=>handleRecall(it.id)} style={btnRecall}>Rechamar</button>
             </div>
           )) : <div style={{opacity:.7}}>Ainda não há chamados.</div>}
         </div>
 
         <hr style={{ margin:"14px 0", border:"none", borderTop:"1px solid rgba(255,255,255,0.12)" }} />
-
         <div style={row}>
           <button onClick={clearToday} style={btnDanger}>Limpar histórico de HOJE</button>
           <button onClick={clearAll} style={{...btnDanger, background:"#b91c1c"}}>Limpar TUDO (máx. 200)</button>
