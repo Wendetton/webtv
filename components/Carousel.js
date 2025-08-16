@@ -1,5 +1,5 @@
-// components/Carousel.js — carrossel "stories" horizontal (16:9) contido no box,
-// sem alterar o layout; imagens/vídeos mute com auto-avanço e barras.
+// components/Carousel.js — carrossel horizontal (16:9 por altura) preenchendo 100% do box,
+// sem bordas aparentes: frame ocupa 100% e a mídia usa object-fit: cover.
 import { useEffect, useRef, useState } from 'react';
 import { db } from '../utils/firebase';
 import { collection, onSnapshot, orderBy, query } from 'firebase/firestore';
@@ -109,7 +109,7 @@ export default function Carousel(){
         ))}
       </div>
 
-      {/* Frame horizontal 16:9 por altura */}
+      {/* Frame horizontal preenche 100% do box */}
       <div className="stories-frame">
         {it.kind === 'video' ? (
           <video
@@ -148,25 +148,23 @@ const styles = (
     /* ocupa 100% do espaço dado pela coluna .tv-carousel */
     .stories-wrap{ position:relative; width:100%; height:100%; }
 
-    /* Frame horizontal 16:9 por ALTURA (igual ao YouTube) */
+    /* Frame agora ocupa 100% (sem background/contorno) para não aparecer nenhuma borda */
     .stories-frame{
       position:absolute; inset:0;
-      height:100%;
-      aspect-ratio:16 / 9;
-      width:auto; max-width:100%;
-      margin:0 auto;
+      width:100%; height:100%;
       border-radius:12px;
-      background:#0b0f12;
-      box-shadow:inset 0 0 0 1px rgba(255,255,255,.06);
+      background: transparent;          /* <- sem fundo */
+      box-shadow: none;                  /* <- sem “linha” de borda */
       overflow:hidden;
     }
 
-    /* Mídia “contida” (sem cortes). Troque para cover se quiser preencher cortando um pouco. */
+    /* Mídia cobre totalmente o frame (sem sobrar nada) */
     .stories-media{
       position:absolute; inset:0;
       width:100%; height:100%;
-      object-fit: cover;
-      background:#0b0f12;
+      object-fit: cover;                 /* <- preenche 100%, corta o excesso */
+      object-position: center;
+      background: transparent;
     }
 
     /* Barras de progresso dentro do frame */
