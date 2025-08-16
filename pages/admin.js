@@ -7,6 +7,7 @@ import PatientHistory from "../components/PatientHistory";
 import PatientCall from "../components/PatientCall";
 import ImageUploader from "../components/ImageUploader"; // Importação do novo componente
 import CallPanel from "../components/CallPanel";
+import CarouselManager from '../components/CarouselManager';
 
 export default function Admin() {
   // Estados do painel
@@ -28,6 +29,7 @@ export default function Admin() {
       <h2>Painel Administrativo</h2>
       <CallPanel />
       <YoutubeConfig />
+      <CarouselManager />
       <ImageUploader /> {/* <-- Adicione aqui o painel de upload e pré-visualização */}
       <AnnounceSettings />
     </div>
