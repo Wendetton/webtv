@@ -165,7 +165,7 @@ const styles = (
     .stories-media{
       position:absolute; inset:0;
       width:100%; height:100%;
-      object-fit:contain;
+      object-fit: cover;
       background:#0b0f12;
     }
 
