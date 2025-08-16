@@ -153,4 +153,147 @@ export default function TV(){
   const isIdle = forcedIdle || !history.length || !withinIdle;
 
   // 2) Monta o "grupo" atual (1 ou 2 caixas):
-  //    - Sempre inclui a chamada mais recente se
+  //    - Sempre inclui a chamada mais recente se não estiver idle
+  //    - Se houver outra chamada com diferença ≤ 30s, inclui a segunda
+  let currentGroup = [];
+  if (!isIdle && history.length) {
+    const first = history[0];
+    const firstMs = first.timestamp?.toMillis?.() || (first.timestamp?.seconds ? first.timestamp.seconds * 1000 : null);
+    if (firstMs != null) {
+      currentGroup.push(first);
+      // procura mais um dentro da janela de 30s
+      for (let i = 1; i < history.length && currentGroup.length < 2; i++) {
+        const h = history[i];
+        const t = h.timestamp?.toMillis?.() || (h.timestamp?.seconds ? h.timestamp.seconds * 1000 : null);
+        if (t != null && (firstMs - t) <= GROUP_WINDOW_MS) {
+          currentGroup.push(h);
+        } else {
+          break; // os próximos serão ainda mais antigos
+        }
+      }
+    }
+  }
+
+  // 3) Chamados recentes (2 itens), ignorando quem está no grupo atual
+  const currentIds = new Set(currentGroup.map(x => x.id));
+  const recentItems = history.filter(h => !currentIds.has(h.id)).slice(0, 2);
+
+  return (
+    <div className="tv-screen">
+      <Head>
+        <title>Chamador na TV</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+      </Head>
+
+      <div className="tv-video-wrap">
+        <div className="tv-video-inner">
+          {videoId ? (
+            <YoutubePlayer videoId={videoId} />
+          ) : (
+            <div className="flex center" style={{ width:'100%', height:'100%', opacity:0.6 }}>
+              <div>Configure o vídeo no painel Admin…</div>
+            </div>
+          )}
+        </div>
+        <div className="tv-carousel">
+          <Carousel />
+        </div>
+      </div>
+
+      <div className="tv-footer">
+        {/* Chamados recentes */}
+        <div className="called-list">
+          {recentItems.length ? (
+            recentItems.map((h, i) => (
+              <span key={i} className="called-chip">
+                {h.nome} — Consultório {h.sala}
+              </span>
+            ))
+          ) : (
+            <span className="muted">Sem chamados recentes…</span>
+          )}
+        </div>
+
+        {/* Destaque (Chamando agora) */}
+        <div className={`current-call ${isIdle ? 'idle idle-full' : ''}`}>
+          {isIdle ? (
+            <img className="idle-logo" src="/logo.png" alt="Logo da clínica" />
+          ) : (
+            <>
+              <div className="label">Chamando agora</div>
+
+              <div className={`now-cards cols-${currentGroup.length}`}>
+                {currentGroup.map((it) => (
+                  <div key={it.id} className="now-card">
+                    <div className="now-name">{String(it.nome || '—')}</div>
+                    <div className="now-room">Consultório {String(it.sala || '')}</div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
+      <Script src="/tv-ducking.js" strategy="afterInteractive" />
+
+      {/* estilos: idle com fundo branco; e grid para 1–2 cartões */}
+      <style jsx global>{`
+        .current-call.idle.idle-full {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: #ffffff;
+          border-radius: inherit;
+          box-shadow: inset 0 0 0 1px rgba(0,0,0,.06), 0 10px 28px rgba(0,0,0,.08);
+          transition: background .25s ease, box-shadow .25s ease;
+        }
+        .current-call.idle.idle-full .idle-logo {
+          max-width: clamp(220px, 40%, 600px);
+          max-height: 70%;
+          object-fit: contain;
+          filter: drop-shadow(0 6px 16px rgba(0,0,0,.12));
+          opacity: 0; transform: scale(.98);
+          animation: tvFadeIn 380ms ease forwards;
+        }
+
+        .now-cards {
+          display: grid;
+          gap: 12px;
+          margin-top: 8px;
+        }
+        .now-cards.cols-1 { grid-template-columns: 1fr; }
+        .now-cards.cols-2 { grid-template-columns: 1fr 1fr; }
+
+        .now-card {
+          background: rgba(255,255,255,0.08);
+          border: 1px solid rgba(255,255,255,0.12);
+          border-radius: 14px;
+          padding: 12px 14px;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          min-height: 86px;
+          box-shadow: 0 6px 20px rgba(0,0,0,.12);
+          animation: tvFadeIn 260ms ease both;
+        }
+        .now-name {
+          font-size: clamp(26px, 3.2vw, 42px);
+          font-weight: 900;
+          line-height: 1.1;
+          text-align: center;
+          letter-spacing: .3px;
+        }
+        .now-room {
+          margin-top: 6px;
+          font-size: clamp(14px, 1.2vw, 16px);
+          opacity: .85;
+          font-weight: 700;
+        }
+
+        @keyframes tvFadeIn { to { opacity: 1; transform: none; } }
+      `}</style>
+    </div>
+  );
+}
