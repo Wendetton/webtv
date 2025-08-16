@@ -1,8 +1,5 @@
-// components/Carousel.js — Stories contidos no box (.tv-carousel)
-// - Usa 100% do espaço do container (sem alterar o layout da TV)
-// - Imagens/Vídeos com object-fit: contain (padroniza enquadramento sem cortar)
-// - Auto-avanço com barras de progresso
-
+// components/Carousel.js — carrossel "stories" horizontal (16:9) contido no box,
+// sem alterar o layout; imagens/vídeos mute com auto-avanço e barras.
 import { useEffect, useRef, useState } from 'react';
 import { db } from '../utils/firebase';
 import { collection, onSnapshot, orderBy, query } from 'firebase/firestore';
@@ -22,7 +19,7 @@ export default function Carousel(){
   const vidRef = useRef(null);
   const vidDurMetaRef = useRef(null);
 
-  // 1) Lê itens (ordenados)
+  // 1) Ler itens (ordenados)
   useEffect(() => {
     const qy = query(collection(db, 'carousel'), orderBy('order', 'asc'));
     const unsub = onSnapshot(qy, (snap) => {
@@ -35,13 +32,13 @@ export default function Carousel(){
     return () => unsub();
   }, []);
 
-  // 2) Relógio para progresso
+  // 2) Relógio (progresso)
   useEffect(() => {
     const t = setInterval(() => setNowMs(Date.now()), 250);
     return () => clearInterval(t);
   }, []);
 
-  // 3) Duração do item atual
+  // 3) Duração
   function currentDurationMs(){
     const it = items[idx];
     if (!it) return 1;
@@ -54,7 +51,7 @@ export default function Carousel(){
     return DEFAULT_IMAGE_SEC * 1000;
   }
 
-  // 4) Reset ao trocar
+  // 4) Troca de item
   useEffect(() => {
     startRef.current = Date.now();
     durRef.current = currentDurationMs();
@@ -67,7 +64,7 @@ export default function Carousel(){
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [idx, items.length]);
 
-  // 5) Avança automático
+  // 5) Avanço automático
   useEffect(() => {
     const total = durRef.current || currentDurationMs();
     const elapsed = nowMs - startRef.current;
@@ -77,7 +74,7 @@ export default function Carousel(){
     }
   }, [nowMs, items.length]);
 
-  // 6) Eventos de vídeo
+  // 6) Vídeo: metadata/ended
   function onLoadedMetadata(e){
     const v = e?.currentTarget;
     if (!v) return;
@@ -103,7 +100,7 @@ export default function Carousel(){
 
   return (
     <div className="stories-wrap">
-      {/* barras de progresso (sempre dentro do frame) */}
+      {/* barras de progresso */}
       <div className="stories-bars">
         {segments.map((v, i) => (
           <div key={i} className="bar">
@@ -112,7 +109,7 @@ export default function Carousel(){
         ))}
       </div>
 
-      {/* Frame usa 100% do box do carrossel, sem mudar o layout da página */}
+      {/* Frame horizontal 16:9 por altura */}
       <div className="stories-frame">
         {it.kind === 'video' ? (
           <video
@@ -148,65 +145,41 @@ export default function Carousel(){
 
 const styles = (
   <style jsx global>{`
-    /* O container .tv-carousel já determina o espaço do carrossel.
-       Aqui garantimos que o conteúdo NUNCA ultrapassa esse espaço. */
-    .stories-wrap{
-      position: relative;
-      width: 100%;
-      height: 100%;
-    }
+    /* ocupa 100% do espaço dado pela coluna .tv-carousel */
+    .stories-wrap{ position:relative; width:100%; height:100%; }
 
-    /* Moldura ocupa 100% do box disponível, sem aspect-ratio fixo.
-       Isso mantém a estrutura da TV intacta (nada "empurra" o layout). */
+    /* Frame horizontal 16:9 por ALTURA (igual ao YouTube) */
     .stories-frame{
-      position: absolute;
-      inset: 0;
-      border-radius: 12px;
-      background: #0b0f12;               /* letterbox agradável */
-      box-shadow: inset 0 0 0 1px rgba(255,255,255,.06);
-      overflow: hidden;
+      position:absolute; inset:0;
+      height:100%;
+      aspect-ratio:16 / 9;
+      width:auto; max-width:100%;
+      margin:0 auto;
+      border-radius:12px;
+      background:#0b0f12;
+      box-shadow:inset 0 0 0 1px rgba(255,255,255,.06);
+      overflow:hidden;
     }
 
-    /* Mídia padronizada por ENQUADRAMENTO: contain (sem corte, sem estourar) */
+    /* Mídia “contida” (sem cortes). Troque para cover se quiser preencher cortando um pouco. */
     .stories-media{
-      position: absolute;
-      inset: 0;
-      width: 100%;
-      height: 100%;
-      object-fit: contain;                /* <- chave: não invade o resto da tela */
-      background: #0b0f12;                /* barras laterais/superiores harmonizadas */
+      position:absolute; inset:0;
+      width:100%; height:100%;
+      object-fit:contain;
+      background:#0b0f12;
     }
 
-    /* Barras de progresso dentro do frame, sem mexer em z-index global */
+    /* Barras de progresso dentro do frame */
     .stories-bars{
-      position: absolute;
-      top: 6px;
-      left: 8px;
-      right: 8px;
-      display: grid;
-      grid-auto-flow: column;
-      gap: 6px;
-      z-index: 2;
+      position:absolute; top:6px; left:8px; right:8px; z-index:2;
+      display:grid; grid-auto-flow:column; gap:6px;
+      max-width:calc(100% - 16px);
+      margin:0 auto;
     }
-    .stories-bars .bar{
-      height: 4px;
-      border-radius: 99px;
-      background: rgba(255,255,255,.18);
-      overflow: hidden;
-    }
-    .stories-bars .fill{
-      display: block;
-      height: 100%;
-      width: 100%;
-      transform-origin: left center;
-      background: var(--tv-accent, #44b2e7);
-    }
+    .stories-bars .bar{ height:4px; border-radius:99px; background:rgba(255,255,255,.18); overflow:hidden; }
+    .stories-bars .fill{ display:block; height:100%; width:100%; transform-origin:left center; background:var(--tv-accent, #44b2e7); }
 
-    .stories-empty-wrap{ display: grid; place-items: center; }
-    .stories-empty{
-      display: grid; place-items: center;
-      color: rgba(255,255,255,.7);
-      font-size: 14px;
-    }
+    .stories-empty-wrap{ display:grid; place-items:center; }
+    .stories-empty{ display:grid; place-items:center; color:rgba(255,255,255,.7); }
   `}</style>
 );
