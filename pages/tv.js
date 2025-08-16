@@ -1,4 +1,4 @@
-// pages/tv.js — "Chamando agora" com até 2 caixas (30s), fila de áudio e logo em idle
+// pages/tv.js — 1 card grande ou 2 cards (30s), após 60s expulsa o mais antigo, idle mostra logo
 import Head from 'next/head';
 import Script from 'next/script';
 import { useEffect, useRef, useState } from 'react';
@@ -7,14 +7,16 @@ import { collection, query, orderBy, limit, onSnapshot, doc } from 'firebase/fir
 import YoutubePlayer from '../components/YoutubePlayer';
 import Carousel from '../components/Carousel';
 
-const GROUP_WINDOW_MS = 30000; // 30s: se a 2ª chamada vier até 30s da última, vira "dupla"
+const GROUP_WINDOW_MS = 30000; // até 30s entre chamadas para virar "dupla"
+const DUAL_KEEP_MS   = 60000;  // mantém 2 cards por até 60s (o mais antigo sai depois)
 
 function applyAccent(color){
   try { document.documentElement.style.setProperty('--tv-accent', color || '#44b2e7'); } catch {}
 }
 
-// Fila de anúncios: garante que o áudio fala um por vez
+// ===== Fila de anúncios (fala um por vez)
 function enqueueAudio(audioQueueRef, playingRef, nome, sala){
+  if (!nome) return;
   audioQueueRef.current.push({nome, sala});
   playQueue(audioQueueRef, playingRef);
 }
@@ -28,7 +30,7 @@ function playQueue(audioQueueRef, playingRef){
       window.tvAnnounce(String(next.nome||''), next.sala != null ? String(next.sala) : '');
     }
   } catch {}
-  // aguarda o anúncio terminar antes do próximo (ajuste fino se quiser)
+  // tempo seguro para terminar a fala antes do próximo
   setTimeout(() => {
     playingRef.current = false;
     playQueue(audioQueueRef, playingRef);
@@ -50,7 +52,7 @@ export default function TV(){
 
   // =================== Assinaturas ===================
 
-  // Histórico (para decidir quem aparece e o "recente")
+  // Histórico (para destaque, recentes e cálculo de idle)
   useEffect(() => {
     const qCalls = query(collection(db, 'calls'), orderBy('timestamp', 'desc'), limit(6));
     const unsub = onSnapshot(qCalls, (snap) => {
@@ -84,19 +86,14 @@ export default function TV(){
       } else {
         if (nonce && nonce !== lastNonceRef.current) {
           lastNonceRef.current = nonce;
-          // força sair do logo, se admin mandou idle=false
-          if (d.idle === false) setForcedIdle(false);
-          // entra na fila (fala um por vez)
+          if (d.idle === false) setForcedIdle(false); // garante sair da logo se veio um chamado
           enqueueAudio(audioQueueRef, playingRef, d.nome, d.sala);
-          // efeito visual "flash" opcional
           const row = document.querySelector('.current-call');
           if (row){ row.classList.remove('flash'); void row.offsetWidth; row.classList.add('flash'); }
         }
       }
 
-      if (typeof d.idle === 'boolean') {
-        setForcedIdle(Boolean(d.idle));
-      }
+      if (typeof d.idle === 'boolean') setForcedIdle(Boolean(d.idle));
     });
     return () => unsub();
   }, []);
@@ -105,14 +102,10 @@ export default function TV(){
   useEffect(() => {
     let usedMain = false;
     const unsubMain = onSnapshot(doc(db,'config','main'), (snap) => {
-      if (snap.exists()) {
-        usedMain = true;
-        applyConfig(snap.data());
-      }
+      if (snap.exists()) { usedMain = true; applyConfig(snap.data()); }
     });
     const unsubCol = onSnapshot(collection(db,'config'), (snap) => {
-      if (usedMain) return;
-      if (!snap.empty) applyConfig(snap.docs[0].data());
+      if (!usedMain && !snap.empty) applyConfig(snap.docs[0].data());
     });
     function applyConfig(data){
       if (!data) return;
@@ -132,7 +125,7 @@ export default function TV(){
     return () => { unsubMain(); unsubCol(); };
   }, []);
 
-  // videoId (do(s) docs de config)
+  // videoId (dos docs de config)
   useEffect(() => {
     const unsubVid = onSnapshot(collection(db,'config'), (snap) => {
       let vid = '';
@@ -147,36 +140,44 @@ export default function TV(){
 
   // =================== Derivações de UI ===================
 
-  // 1) Decide se está IDLE (logo)
+  // IDLE (logo) quando: forçado OU sem histórico OU última chamada ultrapassou idleSeconds
   const nowMs = Date.now();
   const withinIdle = lastCallAt ? (nowMs - lastCallAt) < idleSeconds * 1000 : false;
   const isIdle = forcedIdle || !history.length || !withinIdle;
 
-  // 2) Monta o "grupo" atual (1 ou 2 caixas):
-  //    - Sempre inclui a chamada mais recente se não estiver idle
-  //    - Se houver outra chamada com diferença ≤ 30s, inclui a segunda
+  // Monta o grupo atual (1 ou 2 cards):
+  // - Sempre inclui a chamada mais recente (se não estiver idle)
+  // - Se a 2ª estiver até 30s antes da 1ª, vira "dupla" temporária
+  // - A "dupla" dura no máximo 60s contados a partir do horário da 2ª (mais antiga)
   let currentGroup = [];
   if (!isIdle && history.length) {
     const first = history[0];
     const firstMs = first.timestamp?.toMillis?.() || (first.timestamp?.seconds ? first.timestamp.seconds * 1000 : null);
+
     if (firstMs != null) {
-      currentGroup.push(first);
-      // procura mais um dentro da janela de 30s
-      for (let i = 1; i < history.length && currentGroup.length < 2; i++) {
-        const h = history[i];
-        const t = h.timestamp?.toMillis?.() || (h.timestamp?.seconds ? h.timestamp.seconds * 1000 : null);
-        if (t != null && (firstMs - t) <= GROUP_WINDOW_MS) {
-          currentGroup.push(h);
+      const second = history[1];
+      if (second) {
+        const secondMs = second.timestamp?.toMillis?.() || (second.timestamp?.seconds ? second.timestamp.seconds * 1000 : null);
+        const isPair = secondMs != null && (firstMs - secondMs) <= GROUP_WINDOW_MS;
+        const keepDual = isPair && (nowMs - secondMs) < DUAL_KEEP_MS;
+
+        if (isPair && keepDual) {
+          currentGroup = [first, second]; // dois cards
         } else {
-          break; // os próximos serão ainda mais antigos
+          currentGroup = [first];         // volta ao card único
         }
+      } else {
+        currentGroup = [first];
       }
     }
   }
 
-  // 3) Chamados recentes (2 itens), ignorando quem está no grupo atual
+  // Chamados recentes (2 itens), ignorando quem está no grupo atual
   const currentIds = new Set(currentGroup.map(x => x.id));
   const recentItems = history.filter(h => !currentIds.has(h.id)).slice(0, 2);
+
+  // Dados do card único (quando currentGroup.length === 1)
+  const single = currentGroup.length === 1 ? currentGroup[0] : null;
 
   return (
     <div className="tv-screen">
@@ -222,14 +223,23 @@ export default function TV(){
             <>
               <div className="label">Chamando agora</div>
 
-              <div className={`now-cards cols-${currentGroup.length}`}>
-                {currentGroup.map((it) => (
-                  <div key={it.id} className="now-card">
-                    <div className="now-name">{String(it.nome || '—')}</div>
-                    <div className="now-room">Consultório {String(it.sala || '')}</div>
-                  </div>
-                ))}
-              </div>
+              {currentGroup.length === 2 ? (
+                // ===== MODO DUPLO (dois cards grandes lado a lado) =====
+                <div className="now-cards cols-2">
+                  {currentGroup.map((it) => (
+                    <div key={it.id} className="now-card">
+                      <div className="now-name">{String(it.nome || '—')}</div>
+                      <div className="now-room">Consultório {String(it.sala || '')}</div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                // ===== MODO ÚNICO (box grande clássico) =====
+                <>
+                  <div id="current-call-name">{String(single?.nome || '—')}</div>
+                  <div className="sub">{single?.sala ? `Consultório ${String(single.sala)}` : ''}</div>
+                </>
+              )}
             </>
           )}
         </div>
@@ -237,7 +247,7 @@ export default function TV(){
 
       <Script src="/tv-ducking.js" strategy="afterInteractive" />
 
-      {/* estilos: idle com fundo branco; e grid para 1–2 cartões */}
+      {/* estilos: idle com fundo branco; cards duplos grandes e legíveis */}
       <style jsx global>{`
         .current-call.idle.idle-full {
           display: flex;
@@ -262,24 +272,23 @@ export default function TV(){
           gap: 12px;
           margin-top: 8px;
         }
-        .now-cards.cols-1 { grid-template-columns: 1fr; }
         .now-cards.cols-2 { grid-template-columns: 1fr 1fr; }
 
         .now-card {
           background: rgba(255,255,255,0.08);
           border: 1px solid rgba(255,255,255,0.12);
           border-radius: 14px;
-          padding: 12px 14px;
+          padding: clamp(10px, 1.6vw, 16px);
           display: flex;
           flex-direction: column;
           align-items: center;
           justify-content: center;
-          min-height: 86px;
+          min-height: clamp(90px, 12vw, 160px);
           box-shadow: 0 6px 20px rgba(0,0,0,.12);
           animation: tvFadeIn 260ms ease both;
         }
         .now-name {
-          font-size: clamp(26px, 3.2vw, 42px);
+          font-size: clamp(28px, 3.6vw, 56px);
           font-weight: 900;
           line-height: 1.1;
           text-align: center;
@@ -287,8 +296,8 @@ export default function TV(){
         }
         .now-room {
           margin-top: 6px;
-          font-size: clamp(14px, 1.2vw, 16px);
-          opacity: .85;
+          font-size: clamp(14px, 1.3vw, 18px);
+          opacity: .9;
           font-weight: 700;
         }
 
