@@ -1,5 +1,5 @@
-// pages/tv.js — 1 card grande ou 2 cards (30s), após 60s expulsa o mais antigo, idle mostra logo
-// Correção: adiciona "relógio" (tick) a cada 1s para reavaliar os tempos
+// pages/tv.js — box “Chamando agora” (1 ou 2 cartões em 30s), sai o mais antigo após 60s,
+// volta à logo depois de idleSeconds; topo otimizado: YouTube 16:9 por ALTURA e carrossel horizontal.
 import Head from 'next/head';
 import Script from 'next/script';
 import { useEffect, useRef, useState } from 'react';
@@ -8,8 +8,8 @@ import { collection, query, orderBy, limit, onSnapshot, doc } from 'firebase/fir
 import YoutubePlayer from '../components/YoutubePlayer';
 import Carousel from '../components/Carousel';
 
-const GROUP_WINDOW_MS = 30000; // até 30s entre chamadas para virar "dupla"
-const DUAL_KEEP_MS   = 60000;  // mantém 2 cards por até 60s (o mais antigo sai depois)
+const GROUP_WINDOW_MS = 30000; // 30s para virar "dupla"
+const DUAL_KEEP_MS   = 60000;  // 60s para expulsar a mais antiga
 
 function applyAccent(color){
   try { document.documentElement.style.setProperty('--tv-accent', color || '#44b2e7'); } catch {}
@@ -31,7 +31,6 @@ function playQueue(audioQueueRef, playingRef){
       window.tvAnnounce(String(next.nome||''), next.sala != null ? String(next.sala) : '');
     }
   } catch {}
-  // tempo seguro para terminar a fala antes do próximo
   setTimeout(() => {
     playingRef.current = false;
     playQueue(audioQueueRef, playingRef);
@@ -45,12 +44,9 @@ export default function TV(){
   const [forcedIdle, setForcedIdle] = useState(false);
   const [lastCallAt, setLastCallAt] = useState(null);
 
-  // >>> NOVO: relógio que "marca o tempo" a cada 1s (força re-render)
+  // relógio para reavaliar 60s/idle
   const [nowMs, setNowMs] = useState(Date.now());
-  useEffect(() => {
-    const t = setInterval(() => setNowMs(Date.now()), 1000);
-    return () => clearInterval(t);
-  }, []);
+  useEffect(() => { const t = setInterval(() => setNowMs(Date.now()), 1000); return () => clearInterval(t); }, []);
 
   const initCallsRef = useRef(false);
   const initAnnounceRef = useRef(false);
@@ -58,9 +54,7 @@ export default function TV(){
   const audioQueueRef = useRef([]);
   const playingRef = useRef(false);
 
-  // =================== Assinaturas ===================
-
-  // Histórico (para destaque, recentes e cálculo de idle)
+  // ===== Assina histórico
   useEffect(() => {
     const qCalls = query(collection(db, 'calls'), orderBy('timestamp', 'desc'), limit(6));
     const unsub = onSnapshot(qCalls, (snap) => {
@@ -81,7 +75,7 @@ export default function TV(){
     return () => unsub();
   }, []);
 
-  // Gatilho universal de anúncio (config/announce) → entra na fila de áudio
+  // ===== Gatilho universal de anúncio (config/announce)
   useEffect(() => {
     const unsub = onSnapshot(doc(db,'config','announce'), (snap) => {
       if (!snap.exists()) return;
@@ -94,19 +88,18 @@ export default function TV(){
       } else {
         if (nonce && nonce !== lastNonceRef.current) {
           lastNonceRef.current = nonce;
-          if (d.idle === false) setForcedIdle(false); // garante sair da logo se veio um chamado
+          if (d.idle === false) setForcedIdle(false); // sair da logo
           enqueueAudio(audioQueueRef, playingRef, d.nome, d.sala);
           const row = document.querySelector('.current-call');
           if (row){ row.classList.remove('flash'); void row.offsetWidth; row.classList.add('flash'); }
         }
       }
-
       if (typeof d.idle === 'boolean') setForcedIdle(Boolean(d.idle));
     });
     return () => unsub();
   }, []);
 
-  // Configurações (inclui idleSeconds)
+  // ===== Configurações (idleSeconds, cores, etc.)
   useEffect(() => {
     let usedMain = false;
     const unsubMain = onSnapshot(doc(db,'config','main'), (snap) => {
@@ -133,7 +126,7 @@ export default function TV(){
     return () => { unsubMain(); unsubCol(); };
   }, []);
 
-  // videoId (dos docs de config)
+  // ===== videoId
   useEffect(() => {
     const unsubVid = onSnapshot(collection(db,'config'), (snap) => {
       let vid = '';
@@ -146,44 +139,29 @@ export default function TV(){
     return () => unsubVid();
   }, []);
 
-  // =================== Derivações de UI ===================
-
-  // IDLE (logo) quando: forçado OU sem histórico OU última chamada ultrapassou idleSeconds
+  // ===== Derivações de UI
   const withinIdle = lastCallAt ? (nowMs - lastCallAt) < idleSeconds * 1000 : false;
   const isIdle = forcedIdle || !history.length || !withinIdle;
 
-  // Monta o grupo atual (1 ou 2 cards):
-  // - Sempre inclui a chamada mais recente (se não estiver idle)
-  // - Se a 2ª estiver até 30s antes da 1ª, vira "dupla" temporária
-  // - A "dupla" dura no máximo 60s contados a partir do horário da 2ª (mais antiga)
+  // grupo atual (1 ou 2)
   let currentGroup = [];
   if (!isIdle && history.length) {
     const first = history[0];
     const firstMs = first.timestamp?.toMillis?.() || (first.timestamp?.seconds ? first.timestamp.seconds * 1000 : null);
-
     if (firstMs != null) {
       const second = history[1];
       if (second) {
         const secondMs = second.timestamp?.toMillis?.() || (second.timestamp?.seconds ? second.timestamp.seconds * 1000 : null);
         const isPair = secondMs != null && (firstMs - secondMs) <= GROUP_WINDOW_MS;
         const keepDual = isPair && (nowMs - secondMs) < DUAL_KEEP_MS;
-
-        if (isPair && keepDual) {
-          currentGroup = [first, second]; // dois cards
-        } else {
-          currentGroup = [first];         // volta ao card único
-        }
+        currentGroup = (isPair && keepDual) ? [first, second] : [first];
       } else {
         currentGroup = [first];
       }
     }
   }
-
-  // Chamados recentes (2 itens), ignorando quem está no grupo atual
   const currentIds = new Set(currentGroup.map(x => x.id));
   const recentItems = history.filter(h => !currentIds.has(h.id)).slice(0, 2);
-
-  // Dados do card único (quando currentGroup.length === 1)
   const single = currentGroup.length === 1 ? currentGroup[0] : null;
 
   return (
@@ -193,6 +171,7 @@ export default function TV(){
         <meta name="viewport" content="width=device-width, initial-scale=1" />
       </Head>
 
+      {/* TOPO: vídeo (16:9 por altura) + carrossel horizontal */}
       <div className="tv-video-wrap">
         <div className="tv-video-inner">
           {videoId ? (
@@ -208,8 +187,8 @@ export default function TV(){
         </div>
       </div>
 
+      {/* RODAPÉ: recentes + chamando agora */}
       <div className="tv-footer">
-        {/* Chamados recentes */}
         <div className="called-list">
           {recentItems.length ? (
             recentItems.map((h, i) => (
@@ -222,7 +201,6 @@ export default function TV(){
           )}
         </div>
 
-        {/* Destaque (Chamando agora) */}
         <div className={`current-call ${isIdle ? 'idle idle-full' : ''}`}>
           {isIdle ? (
             <img className="idle-logo" src="/logo.png" alt="Logo da clínica" />
@@ -231,7 +209,6 @@ export default function TV(){
               <div className="label">Chamando agora</div>
 
               {currentGroup.length === 2 ? (
-                // ===== MODO DUPLO (dois cards grandes lado a lado) =====
                 <div className="now-cards cols-2">
                   {currentGroup.map((it) => (
                     <div key={it.id} className="now-card">
@@ -241,7 +218,6 @@ export default function TV(){
                   ))}
                 </div>
               ) : (
-                // ===== MODO ÚNICO (box grande clássico) =====
                 <>
                   <div id="current-call-name">{String(single?.nome || '—')}</div>
                   <div className="sub">{single?.sala ? `Consultório ${String(single.sala)}` : ''}</div>
@@ -254,8 +230,26 @@ export default function TV(){
 
       <Script src="/tv-ducking.js" strategy="afterInteractive" />
 
-      {/* estilos: idle com fundo branco; cards duplos grandes e legíveis */}
+      {/* Estilos globais (topo 16:9 + carrossel horizontal + idle/logo + cartões) */}
       <style jsx global>{`
+        /* TOPO: vídeo à esquerda 16:9 por ALTURA, carrossel à direita */
+        .tv-video-wrap{
+          display: grid;
+          grid-template-columns: auto 1fr;
+          gap: 14px;
+          align-items: center;
+        }
+        .tv-video-inner{
+          height: 100%;
+          aspect-ratio: 16 / 9;
+          width: auto;
+          max-width: 100%;
+          justify-self: start;
+        }
+        .tv-video-inner > *{ width: 100%; height: 100%; }
+        .tv-carousel{ height: 100%; display: grid; }
+
+        /* Idle: cartão branco ocupando todo o box */
         .current-call.idle.idle-full {
           display: flex;
           align-items: center;
@@ -274,39 +268,21 @@ export default function TV(){
           animation: tvFadeIn 380ms ease forwards;
         }
 
-        .now-cards {
-          display: grid;
-          gap: 12px;
-          margin-top: 8px;
-        }
+        /* Dois cartões lado a lado (grandes) */
+        .now-cards { display: grid; gap: 12px; margin-top: 8px; }
         .now-cards.cols-2 { grid-template-columns: 1fr 1fr; }
-
-        .now-card {
+        .now-card{
           background: rgba(255,255,255,0.08);
           border: 1px solid rgba(255,255,255,0.12);
           border-radius: 14px;
           padding: clamp(10px, 1.6vw, 16px);
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
+          display: flex; flex-direction: column; align-items: center; justify-content: center;
           min-height: clamp(90px, 12vw, 160px);
           box-shadow: 0 6px 20px rgba(0,0,0,.12);
           animation: tvFadeIn 260ms ease both;
         }
-        .now-name {
-          font-size: clamp(28px, 3.6vw, 56px);
-          font-weight: 900;
-          line-height: 1.1;
-          text-align: center;
-          letter-spacing: .3px;
-        }
-        .now-room {
-          margin-top: 6px;
-          font-size: clamp(14px, 1.3vw, 18px);
-          opacity: .9;
-          font-weight: 700;
-        }
+        .now-name { font-size: clamp(28px, 3.6vw, 56px); font-weight: 900; line-height: 1.1; text-align: center; letter-spacing: .3px; }
+        .now-room { margin-top: 6px; font-size: clamp(14px, 1.3vw, 18px); opacity: .9; font-weight: 700; }
 
         @keyframes tvFadeIn { to { opacity: 1; transform: none; } }
       `}</style>
