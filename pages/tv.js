@@ -1,4 +1,5 @@
 // pages/tv.js — 1 card grande ou 2 cards (30s), após 60s expulsa o mais antigo, idle mostra logo
+// Correção: adiciona "relógio" (tick) a cada 1s para reavaliar os tempos
 import Head from 'next/head';
 import Script from 'next/script';
 import { useEffect, useRef, useState } from 'react';
@@ -43,6 +44,13 @@ export default function TV(){
   const [idleSeconds, setIdleSeconds] = useState(120);
   const [forcedIdle, setForcedIdle] = useState(false);
   const [lastCallAt, setLastCallAt] = useState(null);
+
+  // >>> NOVO: relógio que "marca o tempo" a cada 1s (força re-render)
+  const [nowMs, setNowMs] = useState(Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
 
   const initCallsRef = useRef(false);
   const initAnnounceRef = useRef(false);
@@ -141,7 +149,6 @@ export default function TV(){
   // =================== Derivações de UI ===================
 
   // IDLE (logo) quando: forçado OU sem histórico OU última chamada ultrapassou idleSeconds
-  const nowMs = Date.now();
   const withinIdle = lastCallAt ? (nowMs - lastCallAt) < idleSeconds * 1000 : false;
   const isIdle = forcedIdle || !history.length || !withinIdle;
 
