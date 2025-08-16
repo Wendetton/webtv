@@ -1,6 +1,5 @@
-// components/CallPanel.js — Chamadas + Rechamar + Ativos agora + Limpar + Status na TV
-// Fila/Rotação na TV via coleção activeCalls (1 doc por consultório)
-// 2025-08-15
+// components/CallPanel.js — Admin simples: Chamar, Rechamar, Limpar, Status na TV (sem activeCalls)
+// 2025-08-15 (revertido e simplificado)
 import { useEffect, useState } from "react";
 import { db } from "../utils/firebase";
 import {
@@ -66,31 +65,6 @@ export default function CallPanel(){
     }
   }
 
-  // seta/atualiza o slot ativo do consultório (coleção activeCalls/{room})
-  async function setActiveSlot(nome, sala, opts = { pingOnly:false }){
-    const r = String(sala || "");
-    if (!r) return;
-    const ref = doc(db, "activeCalls", r);
-    if (opts.pingOnly) {
-      // Rechamar: não troca since, só "pinga" para a TV anunciar
-      await setDoc(ref, {
-        nome: String(nome || ""),
-        sala: r,
-        pingNonce: Date.now() + "-" + Math.random().toString(36).slice(2),
-        lastAnnouncedAt: serverTimestamp(),
-      }, { merge: true });
-    } else {
-      // Chamar: define/atualiza completamente o slot do consultório
-      await setDoc(ref, {
-        nome: String(nome || ""),
-        sala: r,
-        since: serverTimestamp(),
-        ack: false,
-        pingNonce: Date.now() + "-" + Math.random().toString(36).slice(2),
-      }, { merge: true });
-    }
-  }
-
   async function callNow(n, r){
     const nome = (n || "").trim();
     const sala = (r || "").trim();
@@ -103,8 +77,6 @@ export default function CallPanel(){
         sala,
         timestamp: serverTimestamp(),
       });
-      // ocupa/atualiza o slot ativo do consultório
-      await setActiveSlot(nome, sala, { pingOnly: false });
       // garante que a TV saia do modo logo e anuncie
       await fireAnnounce(nome, sala, false);
 
@@ -113,7 +85,7 @@ export default function CallPanel(){
       setRoom(sala);
       setName("");
     } catch (e) {
-      alert("Erro ao chamar. Verifique permissões de escrita nas coleções 'calls' e 'activeCalls'.");
+      alert("Erro ao chamar. Verifique permissões de escrita na coleção 'calls'.");
     } finally {
       setBusy(false);
     }
@@ -121,26 +93,16 @@ export default function CallPanel(){
 
   async function handleCall(){ await callNow(name, room); }
 
-  // RECHAMAR: só ping no slot ativo (não cria novo histórico)
+  // RECHAMAR: só dispara o anúncio; não cria nova linha no histórico
   async function handleRecallLast(){
     if (!list.length) return;
     const last = list[0];
-    try {
-      await setActiveSlot(String(last.nome || ""), String(last.sala || ""), { pingOnly:true });
-      await fireAnnounce(String(last.nome || ""), String(last.sala || ""), false);
-    } catch {
-      alert("Erro ao rechamar. Verifique permissões em 'activeCalls' e 'config/announce'.");
-    }
+    await fireAnnounce(String(last.nome || ""), String(last.sala || ""), false);
   }
-  async function handleRecallByRoom(r){
-    const item = activeList.find(x => x.sala === r);
+  async function handleRecall(id){
+    const item = list.find(x => x.id === id);
     if (!item) return;
-    try {
-      await setActiveSlot(String(item.nome || ""), String(item.sala || ""), { pingOnly:true });
-      await fireAnnounce(String(item.nome || ""), String(item.sala || ""), false);
-    } catch {
-      alert("Erro ao rechamar.");
-    }
+    await fireAnnounce(String(item.nome || ""), String(item.sala || ""), false);
   }
 
   // ===== Limpeza de histórico (e força TV em logo) =====
@@ -177,27 +139,14 @@ export default function CallPanel(){
     }
   }
 
-  // ====== STATUS/Ativos que espelham a TV ======
-
-  // Ativos agora (coleção activeCalls)
-  const [activeList, setActiveList] = useState([]); // [{sala, nome, since...}]
-  useEffect(() => {
-    const unsub = onSnapshot(collection(db, "activeCalls"), (snap) => {
-      const arr = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      // ordena por sala numérica
-      arr.sort((a,b)=> String(a.sala||a.id).localeCompare(String(b.sala||b.id), 'pt', {numeric:true}));
-      setActiveList(arr);
-    });
-    return () => unsub();
-  }, []);
-
-  // Status: últimos 5 da TV, idleSeconds e idle automático
+  // ====== STATUS que espelha a TV ======
   const [tvHistory, setTvHistory] = useState([]);
   const [tvForcedIdle, setTvForcedIdle] = useState(false);
   const [tvLastCallAt, setTvLastCallAt] = useState(null);
   const [tvAutoIdle, setTvAutoIdle] = useState(false);
   const [tvIdleSeconds, setTvIdleSeconds] = useState(120);
 
+  // mesmos 5 docs da TV
   useEffect(() => {
     const q = query(collection(db, "calls"), orderBy("timestamp", "desc"), limit(5));
     const unsub = onSnapshot(q, (snap) => {
@@ -322,35 +271,7 @@ export default function CallPanel(){
           </div>
         </div>
 
-        {/* ===== Ativos agora (1 slot por consultório) ===== */}
-        <div style={{ fontWeight:800, marginBottom:8 }}>Ativos agora</div>
-        <div style={listWrap}>
-          {activeList.length ? activeList.map((it)=>(
-            <div key={it.sala || it.id} style={{
-              display:"grid",
-              gridTemplateColumns:"auto 1fr auto auto",
-              gap:10,
-              alignItems:"center"
-            }}>
-              <span style={{opacity:.9, fontWeight:700}}>C{String(it.sala || it.id)}</span>
-              <div>
-                <b>{it.nome || '—'}</b>
-                {it.since && <span style={{opacity:.7, marginLeft:8}}>(desde {new Date((it.since?.toMillis?.() || (it.since?.seconds*1000) || Date.now())).toLocaleTimeString()})</span>}
-              </div>
-              <button onClick={()=>handleRecallByRoom(String(it.sala || it.id))} style={btnRecall}>Rechamar</button>
-              <button onClick={async ()=>{
-                if (!confirm(`Marcar atendido e remover da TV (Consultório ${String(it.sala||it.id)})?`)) return;
-                try {
-                  await deleteDoc(doc(db, "activeCalls", String(it.sala || it.id)));
-                } catch { alert("Falha ao remover ativo."); }
-              }} style={{...btnDanger, background:"#10b981"}}>Atendido</button>
-            </div>
-          )) : <div style={{opacity:.7}}>Nenhum consultório ativo no momento.</div>}
-        </div>
-
-        <hr style={{ margin:"14px 0", border:"none", borderTop:"1px solid rgba(255,255,255,0.12)" }} />
-
-        {/* Últimos chamados (histórico) com Rechamar (via slot) */}
+        {/* Últimos chamados (histórico) com Rechamar */}
         <div style={{ fontWeight:800, marginBottom:8 }}>Últimos chamados</div>
         <div style={listWrap}>
           {list.length ? list.map((it)=> (
@@ -358,12 +279,7 @@ export default function CallPanel(){
               <div>
                 <b>{it.nome}</b> — Consultório {String(it.sala || "")}
               </div>
-              <button onClick={async ()=>{
-                try{
-                  await setActiveSlot(String(it.nome||""), String(it.sala||""), { pingOnly:true });
-                  await fireAnnounce(String(it.nome||""), String(it.sala||""), false);
-                } catch { alert("Erro ao rechamar."); }
-              }} style={btnRecall}>Rechamar</button>
+              <button onClick={()=>handleRecall(it.id)} style={btnRecall}>Rechamar</button>
             </div>
           )) : <div style={{opacity:.7}}>Ainda não há chamados.</div>}
         </div>
