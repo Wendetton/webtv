@@ -1,128 +1,109 @@
-// components/Carousel.js — Stories (imagens e vídeos mudos) com progresso e auto-avanço
-// Firestore: coleção 'carousel' com campos: url (string), kind ('image'|'video'), durationSec (opcional), order (número), createdAt
+// components/Carousel.js — Stories contidos no box (.tv-carousel)
+// - Usa 100% do espaço do container (sem alterar o layout da TV)
+// - Imagens/Vídeos com object-fit: contain (padroniza enquadramento sem cortar)
+// - Auto-avanço com barras de progresso
+
 import { useEffect, useRef, useState } from 'react';
 import { db } from '../utils/firebase';
 import { collection, onSnapshot, orderBy, query } from 'firebase/firestore';
 
-const DEFAULT_IMAGE_SEC = 7;   // duração padrão para imagem
-const DEFAULT_VIDEO_SEC = 12;  // duração padrão para vídeo (se não conseguir ler metadata)
-const MAX_VIDEO_SEC = 30;      // teto para vídeos (evita vídeos longos)
+const DEFAULT_IMAGE_SEC = 7;
+const DEFAULT_VIDEO_SEC = 12;
+const MAX_VIDEO_SEC = 30;
 
 export default function Carousel(){
   const [items, setItems] = useState([]);
   const [idx, setIdx] = useState(0);
-  const [progress, setProgress] = useState(0); // 0..1 do item atual
+  const [progress, setProgress] = useState(0);
   const [nowMs, setNowMs] = useState(Date.now());
 
   const startRef = useRef(Date.now());
   const durRef = useRef(DEFAULT_IMAGE_SEC * 1000);
   const vidRef = useRef(null);
-  const vidDurFromMetaRef = useRef(null);
+  const vidDurMetaRef = useRef(null);
 
-  // ===== 1) Ler itens do Firestore =====
+  // 1) Lê itens (ordenados)
   useEffect(() => {
-    const q = query(collection(db, 'carousel'), orderBy('order', 'asc'));
-    const unsub = onSnapshot(q, (snap) => {
+    const qy = query(collection(db, 'carousel'), orderBy('order', 'asc'));
+    const unsub = onSnapshot(qy, (snap) => {
       const arr = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      // fallback: se não tiver 'order', ao menos mantém algo estável
       const norm = arr.map((it, i) => ({ ...it, _order: Number.isFinite(it.order) ? Number(it.order) : (i+1) }));
       norm.sort((a,b) => a._order - b._order);
       setItems(norm);
-      // se índice atual estourou, volta para 0
-      setIdx((i) => (i >= norm.length ? 0 : i));
+      setIdx(i => (i >= norm.length ? 0 : i));
     });
     return () => unsub();
   }, []);
 
-  // ===== 2) Relógio para atualizar progresso =====
+  // 2) Relógio para progresso
   useEffect(() => {
-    const t = setInterval(() => setNowMs(Date.now()), 200); // 5x/seg é fluido e leve
+    const t = setInterval(() => setNowMs(Date.now()), 250);
     return () => clearInterval(t);
   }, []);
 
-  // ===== 3) Definir duração do item atual =====
+  // 3) Duração do item atual
   function currentDurationMs(){
     const it = items[idx];
     if (!it) return 1;
-    if (Number.isFinite(it.durationSec) && it.durationSec > 0) {
-      return Math.max(1, it.durationSec) * 1000;
-    }
-    if (it.kind === 'video') {
-      // se metadata já foi lida, usa, senão fallback
-      const meta = vidDurFromMetaRef.current;
-      if (Number.isFinite(meta) && meta > 0) {
-        return Math.min(MAX_VIDEO_SEC, meta) * 1000;
-      }
+    if (Number.isFinite(it.durationSec) && it.durationSec > 0) return it.durationSec * 1000;
+    if (it.kind === 'video'){
+      const meta = vidDurMetaRef.current;
+      if (Number.isFinite(meta) && meta > 0) return Math.min(MAX_VIDEO_SEC, meta) * 1000;
       return DEFAULT_VIDEO_SEC * 1000;
     }
     return DEFAULT_IMAGE_SEC * 1000;
   }
 
-  // ===== 4) Reset ao trocar de item =====
+  // 4) Reset ao trocar
   useEffect(() => {
     startRef.current = Date.now();
     durRef.current = currentDurationMs();
     setProgress(0);
-    vidDurFromMetaRef.current = null;
-    // tenta dar play se for vídeo
-    if (items[idx]?.kind === 'video' && vidRef.current) {
-      // em TVs/Android o autoplay muted costuma funcionar
+    vidDurMetaRef.current = null;
+    if (items[idx]?.kind === 'video' && vidRef.current){
       vidRef.current.currentTime = 0;
-      const p = vidRef.current.play();
-      if (p && typeof p.then === 'function') p.catch(()=>{ /* ignore */ });
+      const p = vidRef.current.play(); if (p?.catch) p.catch(()=>{});
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [idx, items.length]);
 
-  // ===== 5) Avança automaticamente =====
+  // 5) Avança automático
   useEffect(() => {
     const total = durRef.current || currentDurationMs();
     const elapsed = nowMs - startRef.current;
-    const pr = Math.max(0, Math.min(1, elapsed / total));
-    setProgress(pr);
-
-    if (elapsed >= total && items.length > 0) {
-      setIdx((i) => (i + 1) % items.length);
+    setProgress(Math.max(0, Math.min(1, elapsed / total)));
+    if (elapsed >= total && items.length){
+      setIdx(i => (i + 1) % items.length);
     }
   }, [nowMs, items.length]);
 
-  // ===== 6) Eventos do vídeo =====
+  // 6) Eventos de vídeo
   function onLoadedMetadata(e){
     const v = e?.currentTarget;
     if (!v) return;
-    const dur = Number(v.duration);
-    if (Number.isFinite(dur) && dur > 0) {
-      vidDurFromMetaRef.current = Math.min(MAX_VIDEO_SEC, dur);
-      // recalcula duração a partir da metadata
+    const d = Number(v.duration);
+    if (Number.isFinite(d) && d > 0){
+      vidDurMetaRef.current = d;
       durRef.current = currentDurationMs();
     }
   }
-  function onEnded(){
-    // se o vídeo terminar antes do tempo previsto, avança logo
-    setIdx((i) => (items.length ? (i + 1) % items.length : 0));
-  }
+  function onEnded(){ setIdx(i => (items.length ? (i + 1) % items.length : 0)); }
 
-  if (!items.length) {
+  if (!items.length){
     return (
-      <div className="stories-wrap">
-        <div className="stories-frame empty">
-          <div className="stories-empty">Adicione imagens/vídeos no Admin…</div>
-        </div>
+      <div className="stories-wrap stories-empty-wrap">
+        <div className="stories-frame stories-empty">Adicione imagens/vídeos no Admin…</div>
         {styles}
       </div>
     );
   }
 
   const it = items[idx];
-  const segments = items.map((_, i) => {
-    if (i < idx) return 1;
-    if (i > idx) return 0;
-    return progress;
-  });
+  const segments = items.map((_, i) => (i < idx ? 1 : i > idx ? 0 : progress));
 
   return (
     <div className="stories-wrap">
-      {/* barras de progresso */}
+      {/* barras de progresso (sempre dentro do frame) */}
       <div className="stories-bars">
         {segments.map((v, i) => (
           <div key={i} className="bar">
@@ -131,7 +112,7 @@ export default function Carousel(){
         ))}
       </div>
 
-      {/* quadro 9:16 padronizado */}
+      {/* Frame usa 100% do box do carrossel, sem mudar o layout da página */}
       <div className="stories-frame">
         {it.kind === 'video' ? (
           <video
@@ -160,7 +141,6 @@ export default function Carousel(){
           />
         )}
       </div>
-
       {styles}
     </div>
   );
@@ -168,56 +148,51 @@ export default function Carousel(){
 
 const styles = (
   <style jsx global>{`
-    /* Área total do carrossel (usa todo o espaço disponível do .tv-carousel) */
+    /* O container .tv-carousel já determina o espaço do carrossel.
+       Aqui garantimos que o conteúdo NUNCA ultrapassa esse espaço. */
     .stories-wrap{
       position: relative;
       width: 100%;
       height: 100%;
-      display: grid;
-      place-items: center;
     }
 
-    /* Moldura padronizada 9:16 (estilo "stories") */
+    /* Moldura ocupa 100% do box disponível, sem aspect-ratio fixo.
+       Isso mantém a estrutura da TV intacta (nada "empurra" o layout). */
     .stories-frame{
-      position: relative;
-      width: min(100%, 420px);          /* limita largura para manter legibilidade */
-      aspect-ratio: 9 / 16;
-      height: auto;
+      position: absolute;
+      inset: 0;
+      border-radius: 12px;
+      background: #0b0f12;               /* letterbox agradável */
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,.06);
       overflow: hidden;
-      border-radius: 16px;
-      background: #0b0f12;
-      box-shadow: 0 10px 30px rgba(0,0,0,.25), inset 0 0 0 1px rgba(255,255,255,.06);
-    }
-    /* se o espaço for pequeno (TV antiga), usa 100% da altura da área */
-    @media (max-height: 680px){
-      .stories-frame{ width: 100%; }
     }
 
+    /* Mídia padronizada por ENQUADRAMENTO: contain (sem corte, sem estourar) */
     .stories-media{
+      position: absolute;
+      inset: 0;
       width: 100%;
       height: 100%;
-      object-fit: cover;                /* padroniza enquadramento sem distorcer */
+      object-fit: contain;                /* <- chave: não invade o resto da tela */
+      background: #0b0f12;                /* barras laterais/superiores harmonizadas */
     }
 
-    /* Barras de progresso (topo) */
+    /* Barras de progresso dentro do frame, sem mexer em z-index global */
     .stories-bars{
       position: absolute;
-      top: 8px;
-      left: 50%;
-      transform: translateX(-50%);
-      width: min(100%, 420px);
+      top: 6px;
+      left: 8px;
+      right: 8px;
       display: grid;
       grid-auto-flow: column;
       gap: 6px;
-      z-index: 3;
-      padding: 0 8px;
+      z-index: 2;
     }
     .stories-bars .bar{
       height: 4px;
       border-radius: 99px;
       background: rgba(255,255,255,.18);
       overflow: hidden;
-      transform: translateZ(0);
     }
     .stories-bars .fill{
       display: block;
@@ -227,13 +202,11 @@ const styles = (
       background: var(--tv-accent, #44b2e7);
     }
 
-    .stories-frame.empty{
+    .stories-empty-wrap{ display: grid; place-items: center; }
+    .stories-empty{
       display: grid; place-items: center;
       color: rgba(255,255,255,.7);
       font-size: 14px;
-    }
-    .stories-empty{
-      opacity: .8;
     }
   `}</style>
 );
