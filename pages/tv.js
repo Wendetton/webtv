@@ -243,8 +243,8 @@ export default function TV(){
 
                     :root{
               /* Alturas fixas, mas responsivas (ajuste fino se quiser) */
-              --called-h: clamp(44px, 6vh, 56px);
-              --call-h:   clamp(140px, 18vh, 220px);
+            --called-h: clamp(48px, 6.5vh, 64px);
+            --call-h:   clamp(170px, 21vh, 260px);
             }
             
             /* Rodapé vira grid com 2 linhas fixas */
