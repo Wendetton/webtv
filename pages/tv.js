@@ -241,6 +241,64 @@ export default function TV(){
         .tv-video-inner > *{ width: 100%; height: 100%; }
         .tv-carousel{ height: 100%; display: grid; }
 
+                    :root{
+              /* Alturas fixas, mas responsivas (ajuste fino se quiser) */
+              --called-h: clamp(44px, 6vh, 56px);
+              --call-h:   clamp(140px, 18vh, 220px);
+            }
+            
+            /* Rodapé vira grid com 2 linhas fixas */
+            .tv-footer{
+              display: grid;
+              grid-template-rows: var(--called-h) var(--call-h);
+              gap: 10px;
+            }
+            
+            /* Linha de chamados recentes com altura fixa */
+            .called-list{
+              height: var(--called-h);
+              display: flex;
+              align-items: center;
+              gap: 8px;
+              overflow: hidden;
+              white-space: nowrap;
+            }
+            
+            /* Box "Chamando agora" com altura fixa */
+            .current-call{
+              height: var(--call-h);
+              border-radius: 16px;
+              position: relative;
+              overflow: hidden;
+              background: rgba(255,255,255,0.03);
+              border: 1px solid rgba(255,255,255,0.08);
+            }
+            
+            /* Conteúdos internos ocupam 100% da altura do box */
+            .now-cards, .now-single{ height: 100%; }
+            
+            .now-single{
+              display: flex;
+              flex-direction: column;
+              align-items: center;
+              justify-content: center;
+              text-align: center;
+            }
+            
+            /* Títulos e subtítulos permanecem grandes, sem alterar a altura externa */
+            #current-call-name{
+              font-size: clamp(34px, 4.2vw, 64px);
+              font-weight: 900;
+              line-height: 1.05;
+            }
+            .sub{
+              margin-top: 4px;
+              font-size: clamp(14px, 1.4vw, 18px);
+              opacity: .9;
+              font-weight: 700;
+            }
+
+
         .current-call.idle.idle-full {
           display: flex;
           align-items: center;
