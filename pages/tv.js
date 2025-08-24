@@ -1,5 +1,7 @@
-// pages/tv.js — alturas fixas (sem layout shift) para "Chamando agora" e "Chamados recentes"
-// Mantém: dupla em 30s, expulsa o mais antigo em 60s, idle com logo, YouTube 16:9 + carrossel.
+// pages/tv.js — topo mais próximo do anterior (proporção estável),
+// YouTube SEM loop forçado e obedecendo ao vídeo do Admin.
+// Mantém: 1 ou 2 cartões (30s), expulsa mais antigo (60s), idle por idleSeconds, carrossel horizontal.
+
 import Head from 'next/head';
 import Script from 'next/script';
 import { useEffect, useRef, useState } from 'react';
@@ -8,8 +10,8 @@ import { collection, query, orderBy, limit, onSnapshot, doc } from 'firebase/fir
 import YoutubePlayer from '../components/YoutubePlayer';
 import Carousel from '../components/Carousel';
 
-const GROUP_WINDOW_MS = 30000; // janela para virar dupla
-const DUAL_KEEP_MS   = 60000;  // mantém dupla por até 60s
+const GROUP_WINDOW_MS = 30000;
+const DUAL_KEEP_MS   = 60000;
 
 function applyAccent(color){
   try { document.documentElement.style.setProperty('--tv-accent', color || '#44b2e7'); } catch {}
@@ -99,16 +101,10 @@ export default function TV(){
     return () => unsub();
   }, []);
 
-  // configurações gerais
+  // configurações: **fonte única** para videoId (evita conflitos)
   useEffect(() => {
-    let usedMain = false;
     const unsubMain = onSnapshot(doc(db,'config','main'), (snap) => {
-      if (snap.exists()) { usedMain = true; applyConfig(snap.data()); }
-    });
-    const unsubCol = onSnapshot(collection(db,'config'), (snap) => {
-      if (!usedMain && !snap.empty) applyConfig(snap.docs[0].data());
-    });
-    function applyConfig(data){
+      const data = snap.exists() ? snap.data() : null;
       if (!data) return;
       const cfg = {
         announceTemplate: data.announceTemplate || 'Atenção: paciente {{nome}}. Dirija-se à sala {{salaTxt}}.',
@@ -117,27 +113,14 @@ export default function TV(){
         leadMs: Number.isFinite(data.leadMs) ? Number(data.leadMs) : 450,
         accentColor: data.accentColor || '#44b2e7',
         idleSeconds: Number.isFinite(data.idleSeconds) ? Math.min(300, Math.max(60, Number(data.idleSeconds))) : 120,
-        videoId: data.videoId || '',
+        videoId: data.videoId || '',   // **pega apenas daqui**
       };
       applyAccent(cfg.accentColor);
       setIdleSeconds(cfg.idleSeconds);
       setVideoId(String(cfg.videoId || ''));
       if (typeof window !== 'undefined') window.tvConfig = { ...cfg };
-    }
-    return () => { unsubMain(); unsubCol(); };
-  }, []);
-
-  // videoId por config (fallback se não usar playlist)
-  useEffect(() => {
-    const unsubVid = onSnapshot(collection(db,'config'), (snap) => {
-      let vid = '';
-      snap.forEach(docSnap => {
-        const data = docSnap.data();
-        if (!vid && data && data.videoId) vid = String(data.videoId);
-      });
-      setVideoId(vid);
     });
-    return () => unsubVid();
+    return () => { unsubMain(); };
   }, []);
 
   // ===== derivações de UI
@@ -171,7 +154,7 @@ export default function TV(){
         <meta name="viewport" content="width=device-width, initial-scale=1" />
       </Head>
 
-      {/* TOPO: YouTube 16:9 (por altura) + carrossel horizontal */}
+      {/* TOPO (mais próximo do anterior): grid 3:2, player em 16:9 por largura */}
       <div className="tv-video-wrap">
         <div className="tv-video-inner">
           {videoId ? (
@@ -187,9 +170,8 @@ export default function TV(){
         </div>
       </div>
 
-      {/* RODAPÉ: grid com duas linhas de altura fixa */}
+      {/* RODAPÉ */}
       <div className="tv-footer">
-        {/* Linha 1: chamados recentes (altura fixa, sem quebrar linhas) */}
         <div className="called-list">
           {recentItems.length ? (
             recentItems.map((h, i) => (
@@ -202,12 +184,11 @@ export default function TV(){
           )}
         </div>
 
-        {/* Linha 2: chamando agora (altura fixa SEMPRE) */}
         <div className={`current-call ${isIdle ? 'idle idle-full' : ''}`}>
           {isIdle ? (
             <img className="idle-logo" src="/logo.png" alt="Logo da clínica" />
           ) : (
-            <div className="now-shell">{/* grid: label + conteúdo ocupando 100% */}
+            <div className="now-shell">
               <div className="label">Chamando agora</div>
 
               {currentGroup.length === 2 ? (
@@ -232,69 +213,55 @@ export default function TV(){
 
       <Script src="/tv-ducking.js" strategy="afterInteractive" />
 
-      {/* ===== Estilos: alturas fixas (sem shift) ===== */}
+      {/* Estilos: topo 3:2 (mais próximo de antes); resto igual ao que aprovamos */}
       <style jsx global>{`
-        /* VARIÁVEIS: ajuste se quiser mais/menos alto */
         :root{
-          --called-h: clamp(44px, 6vh, 56px);   /* linha de "chamados recentes" */
-          --call-h:   clamp(140px, 18vh, 220px);/* box "chamando agora" (sempre igual) */
+          --called-h: clamp(44px, 6vh, 56px);
+          --call-h:   clamp(140px, 18vh, 220px);
         }
 
-        /* topo: vídeo 16:9 por altura + carrossel */
+        /* TOPO: volta para algo mais tradicional (3:2) e 16:9 por largura no player */
         .tv-video-wrap{
           display: grid;
-          grid-template-columns: auto 1fr;
+          grid-template-columns: 3fr 2fr;   /* <-- proporção próxima do que você usava */
           gap: 14px;
-          align-items: center;
+          align-items: start;
         }
         .tv-video-inner{
-          height: 100%;
-          aspect-ratio: 16 / 9;
-          width: auto;
-          max-width: 100%;
-          justify-self: start;
+          width: 100%;
+          aspect-ratio: 16 / 9;            /* altura deriva da largura */
+          max-height: 100%;
+          border-radius: 12px;
+          overflow: hidden;
         }
         .tv-video-inner > *{ width: 100%; height: 100%; }
+
         .tv-carousel{ height: 100%; display: grid; }
 
-        /* rodapé com ALTURAS FIXAS */
+        /* rodapé com alturas fixas (evita “pulos”) */
         .tv-footer{
           display: grid;
           grid-template-rows: var(--called-h) var(--call-h);
           gap: 10px;
         }
-
-        /* chamados recentes: 1 linha, sem quebra, rolagem horizontal se precisar */
         .called-list{
           height: var(--called-h);
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          overflow: hidden;
-          white-space: nowrap;
+          display: flex; align-items: center;
+          gap: 8px; overflow: hidden; white-space: nowrap;
         }
-        .called-list .called-chip{
-          flex: 0 0 auto;
-        }
+        .called-list .called-chip{ flex: 0 0 auto; }
 
-        /* chamando agora: altura fixa SEMPRE */
         .current-call{
           height: var(--call-h);
           border-radius: 16px;
-          position: relative;
-          overflow: hidden;
+          position: relative; overflow: hidden;
           background: rgba(255,255,255,0.03);
           border: 1px solid rgba(255,255,255,0.08);
         }
-        /* idle ocupa a mesma altura (sem shift) */
         .current-call.idle.idle-full {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          background: #ffffff;
-          border-radius: inherit;
+          display:flex; align-items:center; justify-content:center;
+          background:#ffffff; border-radius:inherit;
           box-shadow: inset 0 0 0 1px rgba(0,0,0,.06), 0 10px 28px rgba(0,0,0,.08);
-          transition: background .25s ease, box-shadow .25s ease;
         }
         .current-call.idle.idle-full .idle-logo {
           max-width: clamp(220px, 40%, 600px);
@@ -305,26 +272,17 @@ export default function TV(){
           animation: tvFadeIn 380ms ease forwards;
         }
 
-        /* casco interno: label + conteúdo que ocupa 100% da altura restante */
         .now-shell{
           height: 100%;
           display: grid;
           grid-template-rows: auto 1fr;
           padding: 8px 10px 10px;
         }
-        .label{
-          font-weight: 800;
-          font-size: clamp(12px, 1.2vw, 14px);
-          opacity: .9;
-        }
+        .label{ font-weight: 800; font-size: clamp(12px, 1.2vw, 14px); opacity: .9; }
 
-        /* modo duplo: cartões preenchem 100% da ÁREA útil */
         .now-cards{
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 12px;
-          align-items: stretch;
-          height: 100%;
+          display: grid; grid-template-columns: 1fr 1fr;
+          gap: 12px; align-items: stretch; height: 100%;
         }
         .now-card{
           height: 100%;
@@ -332,18 +290,15 @@ export default function TV(){
           border: 1px solid rgba(255,255,255,0.12);
           border-radius: 14px;
           padding: clamp(10px, 1.6vw, 16px);
-          display: flex; flex-direction: column; align-items: center; justify-content: center;
+          display:flex; flex-direction:column; align-items:center; justify-content:center;
           box-shadow: 0 6px 20px rgba(0,0,0,.12);
           animation: tvFadeIn 260ms ease both;
         }
         .now-name { font-size: clamp(28px, 3.6vw, 56px); font-weight: 900; line-height: 1.1; text-align: center; letter-spacing: .3px; }
         .now-room { margin-top: 6px; font-size: clamp(14px, 1.3vw, 18px); opacity: .9; font-weight: 700; }
 
-        /* modo único: conteúdo centralizado ocupando 100% */
         .now-single{
-          height: 100%;
-          display: flex; flex-direction: column; align-items: center; justify-content: center;
-          text-align: center;
+          height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center;
         }
         #current-call-name{ font-size: clamp(34px, 4.2vw, 64px); font-weight: 900; line-height: 1.05; }
         .sub{ margin-top: 4px; font-size: clamp(14px, 1.4vw, 18px); opacity: .9; font-weight: 700; }
