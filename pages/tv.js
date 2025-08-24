@@ -1,7 +1,4 @@
-// pages/tv.js — topo mais próximo do anterior (proporção estável),
-// YouTube SEM loop forçado e obedecendo ao vídeo do Admin.
-// Mantém: 1 ou 2 cartões (30s), expulsa mais antigo (60s), idle por idleSeconds, carrossel horizontal.
-
+// pages/tv.js — topo com YouTube 16:9 (playlist opcional) + carrossel; rodapé com chamadas
 import Head from 'next/head';
 import Script from 'next/script';
 import { useEffect, useRef, useState } from 'react';
@@ -16,8 +13,6 @@ const DUAL_KEEP_MS   = 60000;
 function applyAccent(color){
   try { document.documentElement.style.setProperty('--tv-accent', color || '#44b2e7'); } catch {}
 }
-
-// ===== fila de anúncios (fala um por vez)
 function enqueueAudio(audioQueueRef, playingRef, nome, sala){
   if (!nome) return;
   audioQueueRef.current.push({nome, sala});
@@ -28,25 +23,21 @@ function playQueue(audioQueueRef, playingRef){
   const next = audioQueueRef.current.shift();
   if (!next) return;
   playingRef.current = true;
-  try {
-    if (typeof window !== 'undefined' && typeof window.tvAnnounce === 'function') {
-      window.tvAnnounce(String(next.nome||''), next.sala != null ? String(next.sala) : '');
-    }
-  } catch {}
-  setTimeout(() => {
-    playingRef.current = false;
-    playQueue(audioQueueRef, playingRef);
-  }, 4500);
+  try { if (typeof window !== 'undefined' && typeof window.tvAnnounce === 'function') { window.tvAnnounce(String(next.nome||''), next.sala != null ? String(next.sala) : ''); } } catch {}
+  setTimeout(() => { playingRef.current = false; playQueue(audioQueueRef, playingRef); }, 4500);
 }
 
 export default function TV(){
   const [history, setHistory] = useState([]);
-  const [videoId, setVideoId] = useState('');
   const [idleSeconds, setIdleSeconds] = useState(120);
   const [forcedIdle, setForcedIdle] = useState(false);
   const [lastCallAt, setLastCallAt] = useState(null);
 
-  // relógio para reavaliar tempos (dual/idle)
+  // YouTube: playlist preferida; fallback: videoId de config
+  const [videoId, setVideoId] = useState('');
+  const [ytList, setYtList] = useState([]);
+
+  // relógio p/ tempo (60s/idle)
   const [nowMs, setNowMs] = useState(Date.now());
   useEffect(() => { const t = setInterval(() => setNowMs(Date.now()), 1000); return () => clearInterval(t); }, []);
 
@@ -56,14 +47,13 @@ export default function TV(){
   const audioQueueRef = useRef([]);
   const playingRef = useRef(false);
 
-  // histórico de chamadas
+  // Histórico (desc)
   useEffect(() => {
     const qCalls = query(collection(db, 'calls'), orderBy('timestamp', 'desc'), limit(6));
     const unsub = onSnapshot(qCalls, (snap) => {
       const raw = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       const list = raw.filter(x => !x.test && !x.recall);
       setHistory(list);
-
       if (list.length) {
         const t = list[0].timestamp;
         const ms = t && typeof t.toMillis === 'function' ? t.toMillis() : (t?.seconds ? t.seconds * 1000 : null);
@@ -71,19 +61,17 @@ export default function TV(){
       } else {
         setLastCallAt(null);
       }
-
       if (!initCallsRef.current) initCallsRef.current = true;
     });
     return () => unsub();
   }, []);
 
-  // gatilho universal de anúncio
+  // Gatilho de anúncio
   useEffect(() => {
     const unsub = onSnapshot(doc(db,'config','announce'), (snap) => {
       if (!snap.exists()) return;
       const d = snap.data();
       const nonce = String(d.nonce || '');
-
       if (!initAnnounceRef.current) {
         initAnnounceRef.current = true;
         lastNonceRef.current = nonce;
@@ -101,10 +89,16 @@ export default function TV(){
     return () => unsub();
   }, []);
 
-  // configurações: **fonte única** para videoId (evita conflitos)
+  // Config
   useEffect(() => {
+    let usedMain = false;
     const unsubMain = onSnapshot(doc(db,'config','main'), (snap) => {
-      const data = snap.exists() ? snap.data() : null;
+      if (snap.exists()) { usedMain = true; applyConfig(snap.data()); }
+    });
+    const unsubCol = onSnapshot(collection(db,'config'), (snap) => {
+      if (!usedMain && !snap.empty) applyConfig(snap.docs[0].data());
+    });
+    function applyConfig(data){
       if (!data) return;
       const cfg = {
         announceTemplate: data.announceTemplate || 'Atenção: paciente {{nome}}. Dirija-se à sala {{salaTxt}}.',
@@ -113,17 +107,29 @@ export default function TV(){
         leadMs: Number.isFinite(data.leadMs) ? Number(data.leadMs) : 450,
         accentColor: data.accentColor || '#44b2e7',
         idleSeconds: Number.isFinite(data.idleSeconds) ? Math.min(300, Math.max(60, Number(data.idleSeconds))) : 120,
-        videoId: data.videoId || '',   // **pega apenas daqui**
+        videoId: data.videoId || '', // se playlist vazia
       };
       applyAccent(cfg.accentColor);
       setIdleSeconds(cfg.idleSeconds);
       setVideoId(String(cfg.videoId || ''));
       if (typeof window !== 'undefined') window.tvConfig = { ...cfg };
-    });
-    return () => { unsubMain(); };
+    }
+    return () => { unsubMain(); unsubCol(); };
   }, []);
 
-  // ===== derivações de UI
+  // YouTube playlist (ytPlaylist)
+  useEffect(() => {
+    const q = query(collection(db, 'ytPlaylist'), orderBy('order','asc'));
+    const unsub = onSnapshot(q, (snap) => {
+      const list = snap.docs.map(d => ({ id:d.id, ...d.data() }))
+        .map(x => String(x.videoId || '').trim())
+        .filter(Boolean);
+      setYtList(list);
+    });
+    return () => unsub();
+  }, []);
+
+  // Derivações de UI
   const withinIdle = lastCallAt ? (nowMs - lastCallAt) < idleSeconds * 1000 : false;
   const isIdle = forcedIdle || !history.length || !withinIdle;
 
@@ -147,6 +153,9 @@ export default function TV(){
   const recentItems = history.filter(h => !currentIds.has(h.id)).slice(0, 2);
   const single = currentGroup.length === 1 ? currentGroup[0] : null;
 
+  const hasPlaylist = ytList && ytList.length > 0;
+  const hasSingleVideo = !hasPlaylist && !!videoId;
+
   return (
     <div className="tv-screen">
       <Head>
@@ -154,14 +163,16 @@ export default function TV(){
         <meta name="viewport" content="width=device-width, initial-scale=1" />
       </Head>
 
-      {/* TOPO (mais próximo do anterior): grid 3:2, player em 16:9 por largura */}
+      {/* TOPO: YouTube 16:9 por altura + carrossel horizontal */}
       <div className="tv-video-wrap">
         <div className="tv-video-inner">
-          {videoId ? (
+          {hasPlaylist ? (
+            <YoutubePlayer playlist={ytList} />
+          ) : hasSingleVideo ? (
             <YoutubePlayer videoId={videoId} />
           ) : (
             <div className="flex center" style={{ width:'100%', height:'100%', opacity:0.6 }}>
-              <div>Configure o vídeo no painel Admin…</div>
+              <div>Configure um vídeo no Admin (ou crie uma playlist)…</div>
             </div>
           )}
         </div>
@@ -188,9 +199,8 @@ export default function TV(){
           {isIdle ? (
             <img className="idle-logo" src="/logo.png" alt="Logo da clínica" />
           ) : (
-            <div className="now-shell">
+            <>
               <div className="label">Chamando agora</div>
-
               {currentGroup.length === 2 ? (
                 <div className="now-cards cols-2">
                   {currentGroup.map((it) => (
@@ -201,67 +211,44 @@ export default function TV(){
                   ))}
                 </div>
               ) : (
-                <div className="now-single">
+                <>
                   <div id="current-call-name">{String(single?.nome || '—')}</div>
                   <div className="sub">{single?.sala ? `Consultório ${String(single.sala)}` : ''}</div>
-                </div>
+                </>
               )}
-            </div>
+            </>
           )}
         </div>
       </div>
 
       <Script src="/tv-ducking.js" strategy="afterInteractive" />
 
-      {/* Estilos: topo 3:2 (mais próximo de antes); resto igual ao que aprovamos */}
+      {/* Estilos do topo (16:9) + cartões */}
       <style jsx global>{`
-        :root{
-          --called-h: clamp(44px, 6vh, 56px);
-          --call-h:   clamp(140px, 18vh, 220px);
-        }
-
-        /* TOPO: volta para algo mais tradicional (3:2) e 16:9 por largura no player */
         .tv-video-wrap{
           display: grid;
-          grid-template-columns: 3fr 2fr;   /* <-- proporção próxima do que você usava */
+          grid-template-columns: auto 1fr;
           gap: 14px;
-          align-items: start;
+          align-items: center;
         }
         .tv-video-inner{
-          width: 100%;
-          aspect-ratio: 16 / 9;            /* altura deriva da largura */
-          max-height: 100%;
-          border-radius: 12px;
-          overflow: hidden;
+          height: 100%;
+          aspect-ratio: 16 / 9;
+          width: auto;
+          max-width: 100%;
+          justify-self: start;
         }
         .tv-video-inner > *{ width: 100%; height: 100%; }
-
         .tv-carousel{ height: 100%; display: grid; }
 
-        /* rodapé com alturas fixas (evita “pulos”) */
-        .tv-footer{
-          display: grid;
-          grid-template-rows: var(--called-h) var(--call-h);
-          gap: 10px;
-        }
-        .called-list{
-          height: var(--called-h);
-          display: flex; align-items: center;
-          gap: 8px; overflow: hidden; white-space: nowrap;
-        }
-        .called-list .called-chip{ flex: 0 0 auto; }
-
-        .current-call{
-          height: var(--call-h);
-          border-radius: 16px;
-          position: relative; overflow: hidden;
-          background: rgba(255,255,255,0.03);
-          border: 1px solid rgba(255,255,255,0.08);
-        }
         .current-call.idle.idle-full {
-          display:flex; align-items:center; justify-content:center;
-          background:#ffffff; border-radius:inherit;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: #ffffff;
+          border-radius: inherit;
           box-shadow: inset 0 0 0 1px rgba(0,0,0,.06), 0 10px 28px rgba(0,0,0,.08);
+          transition: background .25s ease, box-shadow .25s ease;
         }
         .current-call.idle.idle-full .idle-logo {
           max-width: clamp(220px, 40%, 600px);
@@ -272,36 +259,20 @@ export default function TV(){
           animation: tvFadeIn 380ms ease forwards;
         }
 
-        .now-shell{
-          height: 100%;
-          display: grid;
-          grid-template-rows: auto 1fr;
-          padding: 8px 10px 10px;
-        }
-        .label{ font-weight: 800; font-size: clamp(12px, 1.2vw, 14px); opacity: .9; }
-
-        .now-cards{
-          display: grid; grid-template-columns: 1fr 1fr;
-          gap: 12px; align-items: stretch; height: 100%;
-        }
+        .now-cards { display: grid; gap: 12px; margin-top: 8px; }
+        .now-cards.cols-2 { grid-template-columns: 1fr 1fr; }
         .now-card{
-          height: 100%;
           background: rgba(255,255,255,0.08);
           border: 1px solid rgba(255,255,255,0.12);
           border-radius: 14px;
           padding: clamp(10px, 1.6vw, 16px);
-          display:flex; flex-direction:column; align-items:center; justify-content:center;
+          display: flex; flex-direction: column; align-items: center; justify-content: center;
+          min-height: clamp(90px, 12vw, 160px);
           box-shadow: 0 6px 20px rgba(0,0,0,.12);
           animation: tvFadeIn 260ms ease both;
         }
         .now-name { font-size: clamp(28px, 3.6vw, 56px); font-weight: 900; line-height: 1.1; text-align: center; letter-spacing: .3px; }
         .now-room { margin-top: 6px; font-size: clamp(14px, 1.3vw, 18px); opacity: .9; font-weight: 700; }
-
-        .now-single{
-          height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center;
-        }
-        #current-call-name{ font-size: clamp(34px, 4.2vw, 64px); font-weight: 900; line-height: 1.05; }
-        .sub{ margin-top: 4px; font-size: clamp(14px, 1.4vw, 18px); opacity: .9; font-weight: 700; }
 
         @keyframes tvFadeIn { to { opacity: 1; transform: none; } }
       `}</style>
