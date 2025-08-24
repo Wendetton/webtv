@@ -1,21 +1,27 @@
-// components/YoutubePlayer.js — simples: vídeo único por videoId, sem loop forçado.
-// (Se quiser playlist depois, dá pra reativar, mas aqui focamos em “como era antes”.)
+// components/YoutubePlayer.js — suporta vídeo único OU playlist (loop)
+// Usa a YouTube Iframe API. Se playlist tiver itens, ela tem prioridade sobre videoId.
 
 import { useEffect, useRef } from 'react';
 
-export default function YoutubePlayer({ videoId }) {
+export default function YoutubePlayer({ videoId, playlist = [] }) {
   const playerRef = useRef(null);
   const iframeRef = useRef(null);
   const readyRef = useRef(false);
+  const playlistRef = useRef(playlist);
 
-  // carrega a API do YouTube e cria o player
+  useEffect(() => { playlistRef.current = playlist; }, [playlist]);
+
+  // Carrega a API e cria o player
   useEffect(() => {
     function create() {
       if (playerRef.current) return;
+
+      const initialId = (playlist && playlist.length > 0) ? playlist[0] : (videoId || '');
+
       playerRef.current = new window.YT.Player(iframeRef.current, {
         width: '100%',
         height: '100%',
-        videoId: videoId || '',
+        videoId: initialId,
         playerVars: {
           autoplay: 1,
           controls: 0,
@@ -23,22 +29,38 @@ export default function YoutubePlayer({ videoId }) {
           rel: 0,
           fs: 0,
           iv_load_policy: 3,
-          mute: 0,            // mantém áudio do YouTube
+          mute: 0,
           playsinline: 1,
+          // Dica: para loopar playlist via playerVars, é bom informar "playlist"
+          ...(playlist && playlist.length > 0 ? { loop: 1, playlist: playlist.join(',') } : {}),
         },
         events: {
           onReady: (ev) => {
             readyRef.current = true;
-            try { ev.target.playVideo(); } catch {}
+            try {
+              if (playlist && playlist.length > 0) {
+                ev.target.loadPlaylist(playlist, 0, 0);
+              } else if (videoId) {
+                ev.target.loadVideoById(videoId);
+              }
+              ev.target.playVideo();
+            } catch {}
           },
-          // IMPORTANTE: sem loop forçado aqui
+          onStateChange: (ev) => {
+            const YT = window.YT;
+            if (!YT) return;
+            // Se for vídeo único (sem playlist), loop simples
+            if (ev.data === YT.PlayerState.ENDED && (!playlistRef.current || playlistRef.current.length === 0)) {
+              try { ev.target.seekTo(0); ev.target.playVideo(); } catch {}
+            }
+          }
         }
       });
     }
 
-    if (typeof window !== 'undefined' && window.YT && window.YT.Player) {
+    if (window.YT && window.YT.Player) {
       create();
-    } else if (typeof window !== 'undefined') {
+    } else {
       const tag = document.createElement('script');
       tag.src = 'https://www.youtube.com/iframe_api';
       document.body.appendChild(tag);
@@ -50,25 +72,34 @@ export default function YoutubePlayer({ videoId }) {
       playerRef.current = null;
       readyRef.current = false;
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // troca de vídeo quando o Admin muda o `videoId`
+  // Troca de vídeo único
   useEffect(() => {
     if (!readyRef.current || !playerRef.current) return;
-    try {
-      if (videoId) playerRef.current.loadVideoById(videoId);
-    } catch {}
-  }, [videoId]);
+    if (playlist && playlist.length > 0) return; // playlist tem prioridade
+    if (!videoId) return;
+    try { playerRef.current.loadVideoById(videoId); } catch {}
+  }, [videoId, playlist]);
+
+  // Troca de playlist
+  useEffect(() => {
+    if (!readyRef.current || !playerRef.current) return;
+    if (playlist && playlist.length > 0) {
+      try { playerRef.current.loadPlaylist(playlist, 0, 0); } catch {}
+    }
+  }, [playlist, videoId]);
 
   return (
     <div className="yt-wrap">
       <div className="yt-inner">
-        <div ref={iframeRef} id="yt-player"></div>
+        <div id="yt-player" ref={iframeRef}></div>
       </div>
       <style jsx>{`
-        .yt-wrap { position: relative; width: 100%; height: 100%; }
-        .yt-inner { position: absolute; inset: 0; }
-        #yt-player, #yt-player iframe { width: 100%; height: 100%; }
+        .yt-wrap { position:relative; width:100%; height:100%; }
+        .yt-inner { position:absolute; inset:0; }
+        #yt-player, #yt-player iframe { width:100%; height:100%; }
       `}</style>
     </div>
   );
