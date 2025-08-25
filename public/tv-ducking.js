@@ -1,5 +1,6 @@
-// Anúncio com volume ajustável + ducking do YouTube, com suporte correto ao Fully (stream 9 = TTS).
-// Requer no Fully: Settings → (Advanced) → Enable JavaScript Interface (JS API ligada).
+// public/tv-ducking.js
+// Ducking do YouTube + anúncio com volume ajustável.
+// No Fully: tenta setar volume no STREAM_TTS (9) e, se necessário, no STREAM_MUSIC (3).
 (function(){
   function cfg(){
     const d = (typeof window !== 'undefined' && window.tvConfig) || {};
@@ -19,7 +20,7 @@
     try{
       if (ytRef && ytRef.getVolume) return ytRef;
       if (!window.YT || !window.YT.Player) return null;
-      ytRef = new YT.Player('yt-player', {}); // pega o iframe existente
+      ytRef = new YT.Player('yt-player', {}); // reusa o iframe existente
     }catch(e){}
     return ytRef;
   }
@@ -39,40 +40,51 @@
     return String(t).replace('{{nome}}', name||'').replace('{{sala}}', sala||'').replace('{{salaTxt}}', sTxt);
   }
 
-  // ==== FULLY TTS COM CONTROLE DE VOLUME (stream 9 = TTS) =====================
-  function fullyAvailable(){ return (typeof window !== 'undefined' && typeof window.fully !== 'undefined'); }
+  // ==== FULLY: volume em TTS(9) e fallback Música(3) ==========================
+  function fullyAvailable(){ return typeof window !== 'undefined' && typeof window.fully !== 'undefined'; }
+
+  function setStreamVol(stream, level){
+    try{
+      if (!fullyAvailable() || typeof fully.setAudioVolume !== 'function') return false;
+      fully.setAudioVolume(Math.round(level), stream);
+      return true;
+    }catch(e){ return false; }
+  }
+  function getStreamVol(stream){
+    try{
+      if (!fullyAvailable() || typeof fully.getAudioVolume !== 'function') return null;
+      var v = fully.getAudioVolume(stream);
+      return Number.isFinite(v) ? v : null;
+    }catch(e){ return null; }
+  }
 
   function fullySpeak(text){
     if (!fullyAvailable()) return false;
+    var streams = [9, 3]; // 9=TTS (ideal), 3=Música (alguns Fire TV roteam TTS por aqui)
+    var old = {};
     try{
-      var vol = Math.round(cfg().vol);                 // 0..100
-      var oldVol = null;
-      // lê e ajusta o stream de TTS (9). Documentado na ajuda do Fully.
-      if (typeof fully.getAudioVolume === 'function'){
-        try { oldVol = fully.getAudioVolume(9); } catch(e){}
-      }
-      if (typeof fully.setAudioVolume === 'function'){
-        try { fully.setAudioVolume(vol, 9); } catch(e){}
-      }
+      // guarda volumes atuais (quando possível) e aplica o novo
+      streams.forEach(function(s){
+        old[s] = getStreamVol(s);
+        setStreamVol(s, cfg().vol);
+      });
 
-      // dispara a fala
       if      (typeof fully.textToSpeech === 'function'){ fully.textToSpeech(text); }
       else if (typeof fully.speak        === 'function'){ fully.speak(text); }
       else return false;
 
-      // sem callback → calcula duração aproximada
       var ms = Math.max(1800, Math.min(6500, 3000 + text.length * 25));
       setTimeout(function(){
-        // restaura volume do TTS se conseguimos ler antes
-        try{
-          if (oldVol != null && typeof fully.setAudioVolume === 'function'){
-            fully.setAudioVolume(oldVol, 9);
-          }
-        }catch(e){}
+        // restaura apenas os streams que conseguimos ler antes
+        streams.forEach(function(s){
+          if (old[s] != null) setStreamVol(s, old[s]);
+        });
         duckEnd();
       }, ms);
       return true;
-    }catch(e){ return false; }
+    }catch(e){
+      return false;
+    }
   }
 
   // ==== WEB SPEECH (PC/Chrome) ===============================================
