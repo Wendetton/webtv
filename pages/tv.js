@@ -274,6 +274,53 @@ export default function TV(){
         .now-name { font-size: clamp(28px, 3.6vw, 56px); font-weight: 900; line-height: 1.1; text-align: center; letter-spacing: .3px; }
         .now-room { margin-top: 6px; font-size: clamp(14px, 1.3vw, 18px); opacity: .9; font-weight: 700; }
 
+        /* ===== Alturas fixas (sem pular layout) ===== */
+        :root{
+          /* ajuste aqui se quiser (padrão indicado): */
+          --called-h: clamp(44px, 6vh, 56px);   /* faixa "Últimos chamados"  */
+          --call-h:   clamp(160px, 19vh, 220px);/* box "Chamando agora"      */
+        }
+        
+        /* o rodapé vira um grid de 2 linhas com alturas fixas */
+        .tv-footer{
+          display: grid;
+          grid-template-rows: var(--called-h) var(--call-h);
+          gap: 10px;
+        }
+        
+        /* faixa "Últimos chamados": fixa e sem quebra de linha */
+        .called-list{
+          height: var(--called-h);
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          overflow: hidden;
+          white-space: nowrap;
+        }
+        .called-list .called-chip{ flex: 0 0 auto; }
+        
+        /* box "Chamando agora": altura fixa SEMPRE */
+        .current-call{
+          height: var(--call-h);
+          border-radius: 16px;
+          position: relative;
+          overflow: hidden;
+          background: rgba(255,255,255,0.03);
+          border: 1px solid rgba(255,255,255,0.08);
+        }
+        
+        /* conteúdo interno sempre ocupa 100% da altura do box */
+        .now-cards, .now-single{ height: 100%; }
+        .now-single{
+          display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center;
+        }
+        
+        /* (garante que os dois cartões cresçam por igual no modo duplo) */
+        .now-cards{
+          display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: stretch;
+        }
+        .now-card{ height: 100%; }
+
         @keyframes tvFadeIn { to { opacity: 1; transform: none; } }
       `}</style>
     </div>
