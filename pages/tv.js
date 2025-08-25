@@ -253,7 +253,7 @@ export default function TV(){
 
                     :root{
               /* Alturas fixas, mas responsivas (ajuste fino se quiser) */
-            --called-h: clamp(48px, 6.5vh, 64px);
+            --called-h: clamp(44px, 6vh, 60px);
             --call-h:   clamp(170px, 21vh, 260px);
             }
             
