@@ -98,6 +98,27 @@ export default function YoutubePlayer({ videoId, playlist = [] }) {
     }
   }, [playlist, videoId]);
 
+  // Ouve comandos globais de duck/restore e ajusta o volume do YouTube aqui dentro
+useEffect(() => {
+  function setVol(v){
+    try {
+      const p = (playerRef.current || window.__tvYT);
+      if (!p || typeof p.setVolume !== 'function') return;
+      p.unMute?.();
+      p.setVolume(Math.max(0, Math.min(100, Math.round(v))));
+    } catch {}
+  }
+  function onDuck(e){ const v = (e?.detail?.v ?? 20); setVol(v); }
+  function onRestore(e){ const v = (e?.detail?.v ?? 60); setVol(v); }
+
+  window.addEventListener('tv:duck', onDuck);
+  window.addEventListener('tv:restore', onRestore);
+  return () => {
+    window.removeEventListener('tv:duck', onDuck);
+    window.removeEventListener('tv:restore', onRestore);
+  };
+}, []);
+
   return (
     <div className="yt-wrap">
       <div className="yt-inner">
