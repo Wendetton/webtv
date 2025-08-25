@@ -8,9 +8,6 @@ import PatientCall from "../components/PatientCall";
 import ImageUploader from "../components/ImageUploader"; // Importação do novo componente
 import CallPanel from "../components/CallPanel";
 import CarouselManager from '../components/CarouselManager';
-import YoutubePlaylistManager from '../components/YoutubePlaylistManager';
-import AnnounceVolume from '../components/AnnounceVolume';
-
 
 export default function Admin() {
   // Estados do painel
@@ -31,10 +28,10 @@ export default function Admin() {
     <div style={{ maxWidth: 700, margin: "40px auto", fontFamily: "sans-serif" }}>
       <h2>Painel Administrativo</h2>
       <CallPanel />
-      <YoutubePlaylistManager />
+      <YoutubeConfig />
       <CarouselManager />
+      <ImageUploader /> {/* <-- Adicione aqui o painel de upload e pré-visualização */}
       <AnnounceSettings />
-      <AnnounceVolume />
     </div>
   );
 }

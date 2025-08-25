@@ -1,134 +1,28 @@
-// components/YoutubePlayer.js — suporta vídeo único OU playlist (loop)
-// Usa a YouTube Iframe API. Se playlist tiver itens, ela tem prioridade sobre videoId.
 
-import { useEffect, useRef } from 'react';
+// ======= components/YoutubePlayer.js (FINAL FIX) =======
+// Controles SEMPRE visíveis (controls:1). Ocupa 100% do container.
+// Habilita enablejsapi=1 para permitir ajuste de volume via tv-ducking.js.
 
-export default function YoutubePlayer({ videoId, playlist = [] }) {
-  const playerRef = useRef(null);
-  const iframeRef = useRef(null);
-  const readyRef = useRef(false);
-  const playlistRef = useRef(playlist);
+import YouTube from "react-youtube";
 
-  useEffect(() => { playlistRef.current = playlist; }, [playlist]);
-
-  // Carrega a API e cria o player
-  useEffect(() => {
-    function create() {
-      if (playerRef.current) return;
-
-      const initialId = (playlist && playlist.length > 0) ? playlist[0] : (videoId || '');
-
-      playerRef.current = new window.YT.Player(iframeRef.current, {
-        width: '100%',
-        height: '100%',
-        videoId: initialId,
+export default function YoutubePlayer({ videoId }) {
+  return (
+    <YouTube
+      videoId={videoId}
+      opts={{
+        width: "100%",
+        height: "100%",
         playerVars: {
           autoplay: 1,
-          controls: 0,
+          controls: 1,
           modestbranding: 1,
           rel: 0,
-          fs: 0,
-          iv_load_policy: 3,
-          mute: 0,
           playsinline: 1,
-          // Dica: para loopar playlist via playerVars, é bom informar "playlist"
-          ...(playlist && playlist.length > 0 ? { loop: 1, playlist: playlist.join(',') } : {}),
+          mute: 0,
+          enablejsapi: 1,
         },
-        events: {
-          onReady: (ev) => {
-            readyRef.current = true;
-               // expõe o player globalmente (para outros scripts enviarem comandos)
-              try { window.__tvYT = ev.target; } catch {}
-            
-            try {
-              if (playlist && playlist.length > 0) {
-                ev.target.loadPlaylist(playlist, 0, 0);
-              } else if (videoId) {
-                ev.target.loadVideoById(videoId);
-              }
-              ev.target.playVideo();
-                  // aplica volume "padrão" do YouTube ao iniciar (restoreVolume do /admin)
-                  const v = (window.tvConfig && Number.isFinite(window.tvConfig.restoreVolume))
-                    ? window.tvConfig.restoreVolume : 60;
-                  try { ev.target.unMute(); ev.target.setVolume(v); } catch {}
-            } catch {}
-          },
-          onStateChange: (ev) => {
-            const YT = window.YT;
-            if (!YT) return;
-            // Se for vídeo único (sem playlist), loop simples
-            if (ev.data === YT.PlayerState.ENDED && (!playlistRef.current || playlistRef.current.length === 0)) {
-              try { ev.target.seekTo(0); ev.target.playVideo(); } catch {}
-            }
-          }
-        }
-      });
-    }
-
-    if (window.YT && window.YT.Player) {
-      create();
-    } else {
-      const tag = document.createElement('script');
-      tag.src = 'https://www.youtube.com/iframe_api';
-      document.body.appendChild(tag);
-      window.onYouTubeIframeAPIReady = () => create();
-    }
-
-    return () => {
-      try { if (playerRef.current?.destroy) playerRef.current.destroy(); } catch {}
-      playerRef.current = null;
-      readyRef.current = false;
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Troca de vídeo único
-  useEffect(() => {
-    if (!readyRef.current || !playerRef.current) return;
-    if (playlist && playlist.length > 0) return; // playlist tem prioridade
-    if (!videoId) return;
-    try { playerRef.current.loadVideoById(videoId); } catch {}
-  }, [videoId, playlist]);
-
-  // Troca de playlist
-  useEffect(() => {
-    if (!readyRef.current || !playerRef.current) return;
-    if (playlist && playlist.length > 0) {
-      try { playerRef.current.loadPlaylist(playlist, 0, 0); } catch {}
-    }
-  }, [playlist, videoId]);
-
-  // Ouve comandos globais de duck/restore e ajusta o volume do YouTube aqui dentro
-useEffect(() => {
-  function setVol(v){
-    try {
-      const p = (playerRef.current || window.__tvYT);
-      if (!p || typeof p.setVolume !== 'function') return;
-      p.unMute?.();
-      p.setVolume(Math.max(0, Math.min(100, Math.round(v))));
-    } catch {}
-  }
-  function onDuck(e){ const v = (e?.detail?.v ?? 20); setVol(v); }
-  function onRestore(e){ const v = (e?.detail?.v ?? 60); setVol(v); }
-
-  window.addEventListener('tv:duck', onDuck);
-  window.addEventListener('tv:restore', onRestore);
-  return () => {
-    window.removeEventListener('tv:duck', onDuck);
-    window.removeEventListener('tv:restore', onRestore);
-  };
-}, []);
-
-  return (
-    <div className="yt-wrap">
-      <div className="yt-inner">
-        <div id="yt-player" ref={iframeRef}></div>
-      </div>
-      <style jsx>{`
-        .yt-wrap { position:relative; width:100%; height:100%; }
-        .yt-inner { position:absolute; inset:0; }
-        #yt-player, #yt-player iframe { width:100%; height:100%; }
-      `}</style>
-    </div>
+      }}
+      style={{ width: "100%", height: "100%" }}
+    />
   );
 }
