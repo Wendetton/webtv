@@ -37,6 +37,9 @@ export default function YoutubePlayer({ videoId, playlist = [] }) {
         events: {
           onReady: (ev) => {
             readyRef.current = true;
+               // expõe o player globalmente (para outros scripts enviarem comandos)
+              try { window.__tvYT = ev.target; } catch {}
+            
             try {
               if (playlist && playlist.length > 0) {
                 ev.target.loadPlaylist(playlist, 0, 0);
@@ -44,6 +47,10 @@ export default function YoutubePlayer({ videoId, playlist = [] }) {
                 ev.target.loadVideoById(videoId);
               }
               ev.target.playVideo();
+                  // aplica volume "padrão" do YouTube ao iniciar (restoreVolume do /admin)
+                  const v = (window.tvConfig && Number.isFinite(window.tvConfig.restoreVolume))
+                    ? window.tvConfig.restoreVolume : 60;
+                  try { ev.target.unMute(); ev.target.setVolume(v); } catch {}
             } catch {}
           },
           onStateChange: (ev) => {
