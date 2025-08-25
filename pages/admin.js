@@ -9,6 +9,8 @@ import ImageUploader from "../components/ImageUploader"; // Importação do novo
 import CallPanel from "../components/CallPanel";
 import CarouselManager from '../components/CarouselManager';
 import YoutubePlaylistManager from '../components/YoutubePlaylistManager';
+import AnnounceVolume from '../components/AnnounceVolume';
+
 
 export default function Admin() {
   // Estados do painel
@@ -32,6 +34,7 @@ export default function Admin() {
       <YoutubePlaylistManager />
       <CarouselManager />
       <AnnounceSettings />
+      <AnnounceVolume />
     </div>
   );
 }
