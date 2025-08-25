@@ -65,6 +65,16 @@ export default function TV(){
     });
     return () => unsub();
   }, []);
+    // Corrige o 'vh' para WebView/Android (Fully): usa a altura visível real
+    useEffect(() => {
+      function setVh() {
+        const vh = window.innerHeight * 0.01;           // 1% da altura real
+        document.documentElement.style.setProperty('--vh', `${vh}px`);
+      }
+      setVh();                                          // define na carga
+      window.addEventListener('resize', setVh);         // atualiza em rotações/resize
+      return () => window.removeEventListener('resize', setVh);
+    }, []);
 
   // Gatilho de anúncio
   useEffect(() => {
