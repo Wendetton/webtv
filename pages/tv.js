@@ -303,7 +303,7 @@ export default function TV(){
             }
             .sub{
               margin-top: 4px;
-              font-size: clamp(14px, 1.4vw, 18px);
+              font-size: clamp(10px, 1.4vw, 18px);
               opacity: .9;
               font-weight: 700;
             }
