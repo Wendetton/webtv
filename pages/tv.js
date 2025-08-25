@@ -321,6 +321,45 @@ export default function TV(){
         }
         .now-card{ height: 100%; }
 
+                /* ===== Ajustes finos — chips, logo e respiro no modo duplo ===== */
+        :root{
+          /* Chips (Chamados recentes) */
+          --chip-vpad: 6px;          /* acolchoamento vertical dentro do chip */
+          --chip-hpad: 12px;         /* acolchoamento horizontal */
+          /* Logo (idle) — aumente aqui se quiser ainda maior */
+          --idle-logo-maxw: clamp(320px, 56%, 900px);
+          --idle-logo-maxh: 85%;
+        }
+        
+        /* A) Chips não cortam no topo e centralizam verticalmente */
+        .called-list{ line-height: 1; } /* zera variação de altura por fonte */
+        .called-list .called-chip{
+          display: inline-flex;
+          align-items: center;
+          height: calc(var(--called-h) - 8px);   /* 4px de respiro em cima/baixo */
+          padding: var(--chip-vpad) var(--chip-hpad);
+          border-radius: 999px;
+          line-height: 1.05;                     /* evita “cortar” topo da fonte */
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        
+        /* B) Logo maior no idle */
+        .current-call.idle.idle-full .idle-logo{
+          max-width: var(--idle-logo-maxw);
+          max-height: var(--idle-logo-maxh);
+          width: 100%;
+          height: auto;
+          object-fit: contain;
+        }
+        
+        /* C) Mais respiro no box "Chamando agora" (evita encostar na borda inferior) */
+        .now-shell{ padding: 10px 12px 16px; }          /* + espaço no rodapé interno */
+        .now-cards{ gap: 14px; }                         /* um pouquinho mais de gap */
+        .now-card{ padding: clamp(12px, 1.8vw, 22px); }  /* mais espaço dentro do cartão */
+        .now-name{ line-height: 1.12; }                  /* evita encostar no topo */
+
+
         @keyframes tvFadeIn { to { opacity: 1; transform: none; } }
       `}</style>
     </div>
