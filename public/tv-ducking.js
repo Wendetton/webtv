@@ -1,10 +1,10 @@
-// public/tv-ducking.js — Anúncio com volume ajustável (announceVolume) + ducking do YouTube.
-// Strategy: Fully TTS → Web Speech → Beep. Restaura volume ao final.
+// Anúncio com volume ajustável + ducking do YouTube, com suporte correto ao Fully (stream 9 = TTS).
+// Requer no Fully: Settings → (Advanced) → Enable JavaScript Interface (JS API ligada).
 (function(){
-  function getCfg(){
+  function cfg(){
     const d = (typeof window !== 'undefined' && window.tvConfig) || {};
     return {
-      mode: d.announceMode || 'auto',
+      mode: (d.announceMode || 'auto'),                 // 'auto' | 'fully' | 'web' | 'beep'
       template: d.announceTemplate || 'Atenção: paciente {{nome}}. Dirija-se à sala {{salaTxt}}.',
       duck: Number.isFinite(d.duckVolume) ? d.duckVolume : 20,
       restore: Number.isFinite(d.restoreVolume) ? d.restoreVolume : 60,
@@ -13,65 +13,77 @@
     };
   }
 
-  // ==== YouTube ducking (usa o player já existente na página)
-  var ytPlayer = null;
-  function ensureYTPlayer(){
+  // ==== YOUTUBE DUCKING =======================================================
+  var ytRef = null;
+  function ensureYT(){
     try{
-      if (ytPlayer && ytPlayer.getVolume) return ytPlayer;
-      var ifr = document.getElementById('yt-player') || document.querySelector('#yt-player iframe')?.contentWindow;
+      if (ytRef && ytRef.getVolume) return ytRef;
       if (!window.YT || !window.YT.Player) return null;
-      var id = 'yt-player';
-      ytPlayer = new YT.Player(id, {}); // pega o mesmo iframe e cria referência
+      ytRef = new YT.Player('yt-player', {}); // pega o iframe existente
     }catch(e){}
-    return ytPlayer;
+    return ytRef;
   }
   function duckStart(){
-    try{ ensureYTPlayer(); var v = getCfg().duck; if (ytPlayer && ytPlayer.setVolume){ ytPlayer.setVolume(v); ytPlayer.unMute?.(); } }catch(e){}
+    try{ ensureYT(); var v = cfg().duck; if (ytRef && ytRef.setVolume){ ytRef.setVolume(v); ytRef.unMute?.(); } }catch(e){}
   }
   function duckEnd(){
     setTimeout(function(){
-      try{ var v = getCfg().restore; if (ytPlayer && ytPlayer.setVolume){ ytPlayer.setVolume(v); } }catch(e){}
+      try{ var v = cfg().restore; if (ytRef && ytRef.setVolume){ ytRef.setVolume(v); } }catch(e){}
     }, 120);
   }
 
-  // ==== Helpers
+  // ==== TEMPLATE ==============================================================
   function fmt(name, sala){
-    var t = getCfg().template;
+    var t = cfg().template;
     var sTxt = sala ? ('número ' + sala) : '';
     return String(t).replace('{{nome}}', name||'').replace('{{sala}}', sala||'').replace('{{salaTxt}}', sTxt);
   }
 
-  // ==== Fala no Fully (se disponível). Tenta setar volume do aparelho se a API existir.
-  function fullyTTS(text){
+  // ==== FULLY TTS COM CONTROLE DE VOLUME (stream 9 = TTS) =====================
+  function fullyAvailable(){ return (typeof window !== 'undefined' && typeof window.fully !== 'undefined'); }
+
+  function fullySpeak(text){
+    if (!fullyAvailable()) return false;
     try{
-      if (!window.fully) return false;
-      // volume do dispositivo (se a API existir)
-      var vol = Math.round(getCfg().vol);  // 0..100
-      var hadSetter = false;
-      try{
-        if (typeof window.fully.setAudioVolume === 'function'){ window.fully.setAudioVolume(vol); hadSetter = true; }
-      }catch(e){}
-      // falar
-      if (typeof window.fully.textToSpeech === 'function'){ window.fully.textToSpeech(text); }
-      else if (typeof window.fully.speak === 'function'){ window.fully.speak(text); }
-      else { return false; }
-      // se não conseguimos setar o volume por API, respeita volume do dispositivo
-      // não há callback de fim → usa um timeout aproximado
-      var ms = Math.max(1800, Math.min(6000, 3000 + text.length * 25));
-      setTimeout(duckEnd, ms);
+      var vol = Math.round(cfg().vol);                 // 0..100
+      var oldVol = null;
+      // lê e ajusta o stream de TTS (9). Documentado na ajuda do Fully.
+      if (typeof fully.getAudioVolume === 'function'){
+        try { oldVol = fully.getAudioVolume(9); } catch(e){}
+      }
+      if (typeof fully.setAudioVolume === 'function'){
+        try { fully.setAudioVolume(vol, 9); } catch(e){}
+      }
+
+      // dispara a fala
+      if      (typeof fully.textToSpeech === 'function'){ fully.textToSpeech(text); }
+      else if (typeof fully.speak        === 'function'){ fully.speak(text); }
+      else return false;
+
+      // sem callback → calcula duração aproximada
+      var ms = Math.max(1800, Math.min(6500, 3000 + text.length * 25));
+      setTimeout(function(){
+        // restaura volume do TTS se conseguimos ler antes
+        try{
+          if (oldVol != null && typeof fully.setAudioVolume === 'function'){
+            fully.setAudioVolume(oldVol, 9);
+          }
+        }catch(e){}
+        duckEnd();
+      }, ms);
       return true;
     }catch(e){ return false; }
   }
 
-  // ==== Web Speech (Chrome/Android WebView)
-  function webTTS(text){
+  // ==== WEB SPEECH (PC/Chrome) ===============================================
+  function webSpeak(text){
     try{
       if (!window.speechSynthesis || !window.SpeechSynthesisUtterance) return false;
       var u = new SpeechSynthesisUtterance(text);
       u.lang = 'pt-BR';
       u.rate = 1.0;
       u.pitch = 1.0;
-      u.volume = Math.max(0, Math.min(1, getCfg().vol / 100));  // << volume do anúncio
+      u.volume = Math.max(0, Math.min(1, cfg().vol / 100)); // slider do /admin
       u.onend = function(){ duckEnd(); };
       window.speechSynthesis.cancel();
       window.speechSynthesis.speak(u);
@@ -79,14 +91,13 @@
     }catch(e){ return false; }
   }
 
-  // ==== Beep simples (fallback sem TTS), respeita volume
+  // ==== BEEP (fallback) =======================================================
   function beep(){
     try{
       var ctx = new (window.AudioContext || window.webkitAudioContext)();
-      var o = ctx.createOscillator();
-      var g = ctx.createGain();
+      var o = ctx.createOscillator(), g = ctx.createGain();
       o.type = 'sine'; o.frequency.value = 880;
-      g.gain.value = Math.max(0.0001, Math.min(1, getCfg().vol / 100));
+      g.gain.value = Math.max(0.0001, Math.min(1, cfg().vol / 100));
       o.connect(g); g.connect(ctx.destination);
       o.start();
       setTimeout(function(){ o.stop(); duckEnd(); }, 700);
@@ -94,25 +105,25 @@
     }catch(e){ return false; }
   }
 
-  // ==== API pública chamada pelo /tv.js
+  // ==== API PÚBLICA ===========================================================
   window.tvAnnounce = function(nome, sala){
-    try{ duckStart(); }catch(e){}
     var text = fmt(String(nome||''), String(sala||''));
-    var mode = (getCfg().mode || 'auto');
-    var lead = getCfg().lead;
+    var mode = (cfg().mode || 'auto');
+    var lead = cfg().lead;
 
+    duckStart();
     setTimeout(function(){
       var ok = false;
       try{
-        if      (mode === 'fully') ok = fullyTTS(text);
-        else if (mode === 'web')   ok = webTTS(text);
+        if      (mode === 'fully') ok = fullySpeak(text);
+        else if (mode === 'web')   ok = webSpeak(text);
         else if (mode === 'beep')  ok = beep();
-        else                       ok = fullyTTS(text) || webTTS(text) || beep();
+        else                       ok = fullySpeak(text) || webSpeak(text) || beep(); // auto
       }catch(e){}
       if (!ok) duckEnd();
     }, Math.max(0, Number(lead)||0));
   };
 
-  // tenta referenciar o player quando a página carregar
-  window.addEventListener('load', function(){ try{ ensureYTPlayer(); }catch(e){} });
+  // tenta referenciar o player ao carregar
+  window.addEventListener('load', function(){ try{ ensureYT(); }catch(e){} });
 })();
