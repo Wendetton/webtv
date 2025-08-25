@@ -118,6 +118,7 @@ export default function TV(){
         accentColor: data.accentColor || '#44b2e7',
         idleSeconds: Number.isFinite(data.idleSeconds) ? Math.min(300, Math.max(60, Number(data.idleSeconds))) : 120,
         videoId: data.videoId || '', // se playlist vazia
+        announceVolume: Number.isFinite(data.announceVolume) ? Number(data.announceVolume) : 90,  // << NOVO
       };
       applyAccent(cfg.accentColor);
       setIdleSeconds(cfg.idleSeconds);
