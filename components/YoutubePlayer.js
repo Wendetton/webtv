@@ -37,15 +37,13 @@ export default function YoutubePlayer({ videoId, playlist = [] }) {
         events: {
           onReady: (ev) => {
             readyRef.current = true;
-            try {
-              if (playlist && playlist.length > 0) {
-                ev.target.loadPlaylist(playlist, 0, 0);
-              } else if (videoId) {
-                ev.target.loadVideoById(videoId);
-              }
-              ev.target.playVideo();
-            } catch {}
-          },
+                     try {
+                const init = (window.tvConfig && Number.isFinite(window.tvConfig.restoreVolume))
+                  ? window.tvConfig.restoreVolume : 60;
+                ev.target.unMute?.();
+                ev.target.setVolume?.(init);
+              } catch {}
+            },
           onStateChange: (ev) => {
             const YT = window.YT;
             if (!YT) return;
@@ -83,6 +81,25 @@ export default function YoutubePlayer({ videoId, playlist = [] }) {
     try { playerRef.current.loadVideoById(videoId); } catch {}
   }, [videoId, playlist]);
 
+// aplica o volume no MESMO player criado pelo componente
+useEffect(() => {
+  function setVol(v){
+    try{
+      const p = playerRef.current;
+      if (!p) return;
+      // alguns WebViews só respeitam mute/unmute no 0
+      if (v <= 0) { p.mute?.(); p.setVolume?.(0); }
+      else { p.unMute?.(); p.setVolume?.(v); }
+    } catch {}
+  }
+  function onVol(e){
+    const v = Number(e?.detail?.v);
+    if (Number.isFinite(v)) setVol(Math.max(0, Math.min(100, Math.round(v))));
+  }
+  window.addEventListener('tv:ytVolume', onVol);
+  return () => window.removeEventListener('tv:ytVolume', onVol);
+}, []);
+  
   // Troca de playlist
   useEffect(() => {
     if (!readyRef.current || !playerRef.current) return;
