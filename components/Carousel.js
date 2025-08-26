@@ -1,183 +1,296 @@
-// components/Carousel.js — carrossel horizontal (16:9 por altura) preenchendo 100% do box,
-// sem bordas aparentes: frame ocupa 100% e a mídia usa object-fit: cover.
-import { useEffect, useRef, useState } from 'react';
-import { db } from '../utils/firebase';
-import { collection, onSnapshot, orderBy, query } from 'firebase/firestore';
+// components/Carousel.js
+import { useEffect, useMemo, useRef, useState } from "react";
 
-const DEFAULT_IMAGE_SEC = 7;
-const DEFAULT_VIDEO_SEC = 12;
-const MAX_VIDEO_SEC = 30;
+/**
+ * Drop-in: transição com crossfade e pré-carregamento do próximo item.
+ * Aceita imagens e vídeos. Mantém API simples:
+ *   <Carousel items={[{url, type: 'image'|'video', durationMs?}]} />
+ *
+ * Observações:
+ * - Usa double-buffer (duas camadas absolutas) para o fade ficar suave.
+ * - Pré-carrega o próximo item: imgs com HTMLImageElement.decode(), vídeos aguardam 'canplaythrough' (timeout de segurança).
+ * - Respeita reduced motion (prefers-reduced-motion).
+ */
+export default function Carousel({
+  items,
+  media,
+  data,
+  intervalMs = 6000,       // fallback quando item.durationMs não vier
+  transitionMs = 450,      // duração do fade
+}) {
+  const list = useMemo(() => {
+    const src = items || media || data || [];
+    return Array.isArray(src) ? src.filter(Boolean) : [];
+  }, [items, media, data]);
 
-export default function Carousel(){
-  const [items, setItems] = useState([]);
   const [idx, setIdx] = useState(0);
-  const [progress, setProgress] = useState(0);
-  const [nowMs, setNowMs] = useState(Date.now());
+  const [fading, setFading] = useState(false);
+  const [ready, setReady] = useState(false);
+  const [frontIsA, setFrontIsA] = useState(true); // alterna entre camada A e B
+  const timerRef = useRef(null);
+  const nextAbortRef = useRef(null);
 
-  const startRef = useRef(Date.now());
-  const durRef = useRef(DEFAULT_IMAGE_SEC * 1000);
-  const vidRef = useRef(null);
-  const vidDurMetaRef = useRef(null);
+  // cache simples para pré-carregamento
+  const cacheRef = useRef(new Map()); // url -> { ok: boolean, type: 'image'|'video' }
 
-  // 1) Ler itens (ordenados)
-  useEffect(() => {
-    const qy = query(collection(db, 'carousel'), orderBy('order', 'asc'));
-    const unsub = onSnapshot(qy, (snap) => {
-      const arr = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      const norm = arr.map((it, i) => ({ ...it, _order: Number.isFinite(it.order) ? Number(it.order) : (i+1) }));
-      norm.sort((a,b) => a._order - b._order);
-      setItems(norm);
-      setIdx(i => (i >= norm.length ? 0 : i));
-    });
-    return () => unsub();
+  const reduceMotion = useMemo(() => {
+    if (typeof window === 'undefined') return false;
+    return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   }, []);
 
-  // 2) Relógio (progresso)
-  useEffect(() => {
-    const t = setInterval(() => setNowMs(Date.now()), 250);
-    return () => clearInterval(t);
-  }, []);
+  // limpa timers ao desmontar
+  useEffect(() => () => { clearTimer(); }, []);
 
-  // 3) Duração
-  function currentDurationMs(){
-    const it = items[idx];
-    if (!it) return 1;
-    if (Number.isFinite(it.durationSec) && it.durationSec > 0) return it.durationSec * 1000;
-    if (it.kind === 'video'){
-      const meta = vidDurMetaRef.current;
-      if (Number.isFinite(meta) && meta > 0) return Math.min(MAX_VIDEO_SEC, meta) * 1000;
-      return DEFAULT_VIDEO_SEC * 1000;
+  useEffect(() => {
+    setReady(list.length > 0);
+    setIdx(0);
+  }, [list]);
+
+  useEffect(() => {
+    if (!ready || list.length === 0) return;
+    scheduleNext();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, idx, list]);
+
+  function clearTimer() {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = null;
+    if (nextAbortRef.current) {
+      try { nextAbortRef.current.aborted = true; } catch {}
+      nextAbortRef.current = null;
     }
-    return DEFAULT_IMAGE_SEC * 1000;
   }
 
-  // 4) Troca de item
-  useEffect(() => {
-    startRef.current = Date.now();
-    durRef.current = currentDurationMs();
-    setProgress(0);
-    vidDurMetaRef.current = null;
-    if (items[idx]?.kind === 'video' && vidRef.current){
-      vidRef.current.currentTime = 0;
-      const p = vidRef.current.play(); if (p?.catch) p.catch(()=>{});
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [idx, items.length]);
+  async function preload(item, signal) {
+    if (!item || !item.url) return true;
+    const url = String(item.url);
+    if (cacheRef.current.get(url)?.ok) return true;
 
-  // 5) Avanço automático
-  useEffect(() => {
-    const total = durRef.current || currentDurationMs();
-    const elapsed = nowMs - startRef.current;
-    setProgress(Math.max(0, Math.min(1, elapsed / total)));
-    if (elapsed >= total && items.length){
-      setIdx(i => (i + 1) % items.length);
+    // Imagem
+    if (!item.type || item.type === 'image') {
+      try {
+        const img = new Image();
+        img.decoding = 'async';
+        img.loading = 'eager';
+        img.src = url;
+        await img.decode();
+        if (signal?.aborted) return false;
+        cacheRef.current.set(url, { ok: true, type: 'image' });
+        return true;
+      } catch {
+        // mesmo se falhar decode(), tentamos marcar ok ao carregar onload
+        return new Promise((resolve) => {
+          const img = new Image();
+          img.onload = () => {
+            if (!signal?.aborted) {
+              cacheRef.current.set(url, { ok: true, type: 'image' });
+              resolve(true);
+            } else resolve(false);
+          };
+          img.onerror = () => resolve(false);
+          img.src = url;
+        });
+      }
     }
-  }, [nowMs, items.length]);
 
-  // 6) Vídeo: metadata/ended
-  function onLoadedMetadata(e){
-    const v = e?.currentTarget;
-    if (!v) return;
-    const d = Number(v.duration);
-    if (Number.isFinite(d) && d > 0){
-      vidDurMetaRef.current = d;
-      durRef.current = currentDurationMs();
+    // Vídeo
+    if (item.type === 'video') {
+      return new Promise((resolve) => {
+        const v = document.createElement('video');
+        v.preload = 'auto';
+        v.muted = true;
+        v.src = url;
+        let done = false;
+        const finish = (ok) => {
+          if (done) return;
+          done = true;
+          if (!signal?.aborted && ok) cacheRef.current.set(url, { ok: true, type: 'video' });
+          resolve(ok && !signal?.aborted);
+        };
+        const to = setTimeout(() => finish(true), 1200); // timeout de segurança
+        v.addEventListener('canplaythrough', () => { clearTimeout(to); finish(true); }, { once: true });
+        v.addEventListener('error', () => { clearTimeout(to); finish(false); }, { once: true });
+        // força carregamento
+        v.load?.();
+      });
     }
+
+    return true;
   }
-  function onEnded(){ setIdx(i => (items.length ? (i + 1) % items.length : 0)); }
 
-  if (!items.length){
+  function scheduleNext() {
+    clearTimer();
+    if (list.length <= 1) return;
+
+    const cur = list[idx];
+    const dur = Math.max(1500, Number(cur?.durationMs ?? intervalMs));
+    timerRef.current = setTimeout(async () => {
+      const next = (idx + 1) % list.length;
+      // Pré-carrega o próximo antes de trocar (com abort handle)
+      const ab = { aborted: false };
+      nextAbortRef.current = ab;
+      await preload(list[next], ab);
+
+      // Faz a troca com fade
+      if (!reduceMotion) setFading(true);
+      setFrontIsA((v) => !v);
+      // pequena janela de fade
+      setTimeout(() => {
+        setIdx(next);
+        setFading(false);
+      }, reduceMotion ? 0 : transitionMs);
+    }, dur);
+  }
+
+  if (!ready) {
     return (
-      <div className="stories-wrap stories-empty-wrap">
-        <div className="stories-frame stories-empty">Adicione imagens/vídeos no Admin…</div>
-        {styles}
+      <div className="stories-frame stories-skeleton">
+        <style jsx>{`
+          .stories-frame{
+            position: relative; width: 100%; height: 100%;
+            border-radius: 12px; overflow: hidden;
+            background: rgba(255,255,255,0.06);
+          }
+          .stories-skeleton::after{
+            content: ""; position: absolute; inset: 0;
+            background: linear-gradient(90deg,
+              rgba(255,255,255,.04) 0%,
+              rgba(255,255,255,.09) 50%,
+              rgba(255,255,255,.04) 100%);
+            animation: shine 1150ms infinite;
+          }
+          @keyframes shine {
+            from { transform: translateX(-100%); }
+            to   { transform: translateX(100%); }
+          }
+        `}</style>
       </div>
     );
   }
 
-  const it = items[idx];
-  const segments = items.map((_, i) => (i < idx ? 1 : i > idx ? 0 : progress));
+  const cur = list[idx];
+  const next = list[(idx + 1) % list.length];
 
   return (
-    <div className="stories-wrap">
-      {/* barras de progresso */}
-      <div className="stories-bars">
-        {segments.map((v, i) => (
-          <div key={i} className="bar">
-            <span className="fill" style={{ transform: `scaleX(${v})` }} />
-          </div>
-        ))}
-      </div>
-
-      {/* Frame horizontal preenche 100% do box */}
-      <div className="stories-frame">
-        {it.kind === 'video' ? (
-          <video
-            key={it.id}
-            ref={vidRef}
-            className="stories-media"
-            muted
-            playsInline
-            autoPlay
-            controls={false}
-            loop={false}
-            preload="auto"
-            onLoadedMetadata={onLoadedMetadata}
-            onEnded={onEnded}
-          >
-            <source src={String(it.url || '')} />
-          </video>
-        ) : (
-          <img
-            key={it.id}
-            className="stories-media"
-            src={String(it.url || '')}
-            alt=""
-            loading="lazy"
-            referrerPolicy="no-referrer"
-          />
-        )}
-      </div>
-      {styles}
+    <div className="stories-frame">
+      {/* Camada A */}
+      <Layer
+        active={frontIsA}
+        fading={fading && frontIsA}
+        item={cur}
+        transitionMs={transitionMs}
+      />
+      {/* Camada B (mostra o próximo já carregado quando alterna) */}
+      <Layer
+        active={!frontIsA}
+        fading={fading && !frontIsA}
+        item={next}
+        transitionMs={transitionMs}
+        isBack
+      />
+      <style jsx>{`
+        .stories-frame{
+          position: relative; width: 100%; height: 100%;
+          border-radius: 12px; overflow: hidden;
+          background: rgba(0,0,0,0.25);
+          /* fallback para webview sem aspect-ratio controlado externamente */
+        }
+      `}</style>
     </div>
   );
 }
 
-const styles = (
-  <style jsx global>{`
-    /* ocupa 100% do espaço dado pela coluna .tv-carousel */
-    .stories-wrap{ position:relative; width:100%; height:100%; }
+/** Uma camada (A ou B) que ocupa todo o espaço e faz fade por opacity */
+function Layer({ item, active, fading, transitionMs, isBack }) {
+  const [loaded, setLoaded] = useState(false);
+  const refVid = useRef(null);
 
-    /* Frame agora ocupa 100% (sem background/contorno) para não aparecer nenhuma borda */
-    .stories-frame{
-      position:absolute; inset:0;
-      width:100%; height:100%;
-      border-radius:12px;
-      background: transparent;          /* <- sem fundo */
-      box-shadow: none;                  /* <- sem “linha” de borda */
-      overflow:hidden;
-    }
+  useEffect(() => {
+    setLoaded(false);
+  }, [item?.url]);
 
-    /* Mídia cobre totalmente o frame (sem sobrar nada) */
-    .stories-media{
-      position:absolute; inset:0;
-      width:100%; height:100%;
-      object-fit: cover;                 /* <- preenche 100%, corta o excesso */
-      object-position: center;
-      background: transparent;
-    }
+  // Quando o vídeo ficar pronto, marcar loaded
+  useEffect(() => {
+    if (!item || item.type !== 'video') return;
+    const v = refVid.current;
+    if (!v) return;
+    const onReady = () => setLoaded(true);
+    v.muted = true; v.playsInline = true;
+    v.preload = "auto";
+    v.addEventListener('canplaythrough', onReady, { once: true });
+    v.load?.();
+    return () => { v.removeEventListener('canplaythrough', onReady); };
+  }, [item?.url, item?.type]);
 
-    /* Barras de progresso dentro do frame */
-    .stories-bars{
-      position:absolute; top:6px; left:8px; right:8px; z-index:2;
-      display:grid; grid-auto-flow:column; gap:6px;
-      max-width:calc(100% - 16px);
-      margin:0 auto;
-    }
-    .stories-bars .bar{ height:4px; border-radius:99px; background:rgba(255,255,255,.18); overflow:hidden; }
-    .stories-bars .fill{ display:block; height:100%; width:100%; transform-origin:left center; background:var(--tv-accent, #44b2e7); }
+  const isImg = !item?.type || item?.type === 'image';
+  const show = isImg ? true : loaded;
 
-    .stories-empty-wrap{ display:grid; place-items:center; }
-    .stories-empty{ display:grid; place-items:center; color:rgba(255,255,255,.7); }
-  `}</style>
-);
+  return (
+    <div
+      className={[
+        "layer",
+        active ? "is-front" : "is-back",
+        fading ? "is-fading" : "",
+        show ? "is-ready" : "is-loading"
+      ].join(" ")}
+      style={{ transitionDuration: `${transitionMs}ms` }}
+    >
+      {isImg ? (
+        <img
+          src={item?.url}
+          alt=""
+          className="media"
+          loading="eager"
+          decoding="async"
+          fetchpriority="high"
+          onLoad={() => setLoaded(true)}
+        />
+      ) : (
+        <video
+          ref={refVid}
+          className="media"
+          src={item?.url}
+          autoPlay
+          muted
+          loop
+          playsInline
+        />
+      )}
+
+      {!show && <div className="shade" />}
+
+      <style jsx>{`
+        .layer{
+          position: absolute; inset: 0;
+          opacity: 0;
+          transform: scale(1.01);
+          transition-property: opacity, transform;
+          will-change: opacity, transform;
+        }
+        .layer.is-front{ z-index: 2; }
+        .layer.is-back{ z-index: 1; }
+        .layer.is-ready{ opacity: 1; transform: none; }
+        .layer.is-fading{ opacity: 0; transform: scale(1.01); }
+
+        .media{
+          position: absolute; inset: 0;
+          width: 100%; height: 100%;
+          object-fit: cover;               /* preenche todo o box sem bordas */
+          object-position: center;
+          display: block;
+          background: #000;
+        }
+        .shade{
+          position: absolute; inset: 0;
+          background: rgba(0,0,0,.15);
+        }
+
+        /* Reduz movimento para acessibilidade */
+        @media (prefers-reduced-motion: reduce) {
+          .layer{ transition: none !important; }
+        }
+      `}</style>
+    </div>
+  );
+}
+
