@@ -6,7 +6,6 @@ import { db } from '../utils/firebase';
 import { collection, query, orderBy, limit, onSnapshot, doc } from 'firebase/firestore';
 import YoutubePlayer from '../components/YoutubePlayer';
 import Carousel from '../components/Carousel';
-import { onSnapshot, doc } from 'firebase/firestore';
 
 const GROUP_WINDOW_MS = 30000;
 const DUAL_KEEP_MS   = 60000;
@@ -118,7 +117,7 @@ export default function TV(){
     return () => { unsubMain(); unsubCol(); };
   }, []);
 
-    // volume ao vivo do YouTube vindo do /admin
+       // Volume do YouTube vindo do /admin (config/control.ytVolume) → evento global
     useEffect(() => {
       const ref = doc(db, 'config', 'control');
       const unsub = onSnapshot(ref, (snap) => {
@@ -127,10 +126,9 @@ export default function TV(){
         if (!Number.isFinite(d.ytVolume)) return;
         const v = Math.max(0, Math.min(100, Math.round(d.ytVolume)));
         try {
-          const ev = new CustomEvent('tv:ytVolume', { detail: { v }});
+          const ev = new CustomEvent('tv:ytVolume', { detail: { v } });
           window.dispatchEvent(ev);
         } catch {
-          // fallback caso o WebView não suporte CustomEvent nativo
           try {
             const ev = document.createEvent('CustomEvent');
             ev.initCustomEvent('tv:ytVolume', false, false, { v });
@@ -140,6 +138,7 @@ export default function TV(){
       });
       return () => unsub();
     }, []);
+
       
   // YouTube playlist (ytPlaylist)
   useEffect(() => {
