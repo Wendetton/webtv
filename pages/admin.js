@@ -3,16 +3,16 @@ import AnnounceSettings from "../components/AnnounceSettings";
 import { useEffect, useState, useRef } from "react";
 import { db } from "../utils/firebase";
 import {
-  collection, addDoc, query, orderBy, limit, onSnapshot,
+  collection, query, orderBy, limit, onSnapshot,
   doc, getDoc, setDoc, updateDoc
 } from "firebase/firestore";
 import YoutubeConfig from "../components/YoutubeConfig";
 import PatientHistory from "../components/PatientHistory";
 import PatientCall from "../components/PatientCall";
-import ImageUploader from "../components/ImageUploader"; // painel de upload e preview
+import ImageUploader from "../components/ImageUploader";
 import CallPanel from "../components/CallPanel";
 import CarouselManager from '../components/CarouselManager';
-import YoutubePlaylistManager from '../components/YoutubePlaylistManager";
+import YoutubePlaylistManager from '../components/YoutubePlaylistManager';
 
 /** Card para controlar o volume do YouTube em tempo real (salva em config/control.ytVolume) */
 function YTLiveVolume() {
@@ -29,7 +29,6 @@ function YTLiveVolume() {
     return () => unsub();
   }, []);
 
-  // salva a cada movimento (debounce ~150ms)
   function push(v) {
     const ref = doc(db, "config", "control");
     window.clearTimeout(tRef.current);
@@ -72,11 +71,9 @@ function YTLiveVolume() {
 }
 
 export default function Admin() {
-  // Estados do painel
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Monitorar histórico de chamadas em tempo real
   useEffect(() => {
     const q = query(collection(db, "calls"), orderBy("timestamp", "desc"), limit(10));
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
@@ -95,12 +92,15 @@ export default function Admin() {
       {/* Gerenciador de playlist do YouTube */}
       <YoutubePlaylistManager />
 
-      {/* NOVO: Volume do YouTube em tempo real (salva em config/control) */}
+      {/* NOVO: Volume do YouTube em tempo real */}
       <YTLiveVolume />
 
       <CarouselManager />
       <ImageUploader />
       <AnnounceSettings />
+
+      {/* (opcional) pode exibir o histórico aqui se quiser */}
+      {/* <PatientHistory history={history} loading={loading} /> */}
     </div>
   );
 }
