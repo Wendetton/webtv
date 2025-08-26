@@ -1,73 +1,69 @@
-// components/Carousel.js
-import { useEffect, useMemo, useRef, useState } from "react";
+// components/Carousel.js — carrossel com fade suave + pré-carregamento (Firestore)
+// Lê direto da coleção "carousel" (como no seu projeto atual).
+// Campos esperados por item: { url: string, kind: 'image'|'video', order?: number, durationSec?: number }
 
-/**
- * Drop-in: transição com crossfade e pré-carregamento do próximo item.
- * Aceita imagens e vídeos. Mantém API simples:
- *   <Carousel items={[{url, type: 'image'|'video', durationMs?}]} />
- *
- * Observações:
- * - Usa double-buffer (duas camadas absolutas) para o fade ficar suave.
- * - Pré-carrega o próximo item: imgs com HTMLImageElement.decode(), vídeos aguardam 'canplaythrough' (timeout de segurança).
- * - Respeita reduced motion (prefers-reduced-motion).
- */
-export default function Carousel({
-  items,
-  media,
-  data,
-  intervalMs = 6000,       // fallback quando item.durationMs não vier
-  transitionMs = 450,      // duração do fade
-}) {
-  const list = useMemo(() => {
-    const src = items || media || data || [];
-    return Array.isArray(src) ? src.filter(Boolean) : [];
-  }, [items, media, data]);
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { db } from '../utils/firebase';
+import { collection, onSnapshot, orderBy, query } from 'firebase/firestore';
 
+const DEFAULT_IMAGE_SEC = 7;
+const DEFAULT_VIDEO_SEC = 12;
+const MAX_VIDEO_SEC = 30;
+const FADE_MS = 450;
+
+export default function Carousel(){
+  const [items, setItems] = useState([]);
   const [idx, setIdx] = useState(0);
-  const [fading, setFading] = useState(false);
   const [ready, setReady] = useState(false);
-  const [frontIsA, setFrontIsA] = useState(true); // alterna entre camada A e B
+  const [fading, setFading] = useState(false);
+  const [frontIsA, setFrontIsA] = useState(true); // alterna camada A/B
   const timerRef = useRef(null);
   const nextAbortRef = useRef(null);
-
-  // cache simples para pré-carregamento
   const cacheRef = useRef(new Map()); // url -> { ok: boolean, type: 'image'|'video' }
+  const vidDurMetaRef = useRef(null);
 
-  const reduceMotion = useMemo(() => {
-    if (typeof window === 'undefined') return false;
-    return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  // 1) Assina Firestore (ordena por 'order' se existir)
+  useEffect(() => {
+    // tenta ordenar por 'order'; se a coleção não tiver esse campo, comente a linha de 'orderBy'
+    let q = query(collection(db, 'carousel'), orderBy('order', 'asc'));
+    const unsub = onSnapshot(q, snap => {
+      const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      // fallback de ordenação no cliente (se não houver 'order')
+      list.sort((a,b) => {
+        const ao = Number.isFinite(a.order) ? a.order : 999999;
+        const bo = Number.isFinite(b.order) ? b.order : 999999;
+        if (ao !== bo) return ao - bo;
+        return String(a.id).localeCompare(String(b.id));
+      });
+      setItems(list);
+      setIdx(0);
+      setReady(list.length > 0);
+    });
+    return () => unsub();
   }, []);
 
-  // limpa timers ao desmontar
-  useEffect(() => () => { clearTimer(); }, []);
-
-  useEffect(() => {
-    setReady(list.length > 0);
-    setIdx(0);
-  }, [list]);
-
-  useEffect(() => {
-    if (!ready || list.length === 0) return;
-    scheduleNext();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, idx, list]);
-
-  function clearTimer() {
-    if (timerRef.current) clearTimeout(timerRef.current);
-    timerRef.current = null;
-    if (nextAbortRef.current) {
-      try { nextAbortRef.current.aborted = true; } catch {}
-      nextAbortRef.current = null;
+  // 2) Define duração do item atual
+  function curDurationMs(cur){
+    if (!cur) return DEFAULT_IMAGE_SEC * 1000;
+    if (Number.isFinite(cur.durationSec) && cur.durationSec > 0) {
+      return cur.durationSec * 1000;
     }
+    if (cur.kind === 'video'){
+      const meta = vidDurMetaRef.current;
+      if (Number.isFinite(meta) && meta > 0) return Math.min(MAX_VIDEO_SEC, meta) * 1000;
+      return DEFAULT_VIDEO_SEC * 1000;
+    }
+    return DEFAULT_IMAGE_SEC * 1000;
   }
 
-  async function preload(item, signal) {
+  // 3) Pré-carrega o próximo
+  async function preload(item, signal){
     if (!item || !item.url) return true;
     const url = String(item.url);
-    if (cacheRef.current.get(url)?.ok) return true;
+    const cached = cacheRef.current.get(url);
+    if (cached?.ok) return true;
 
-    // Imagem
-    if (!item.type || item.type === 'image') {
+    if (!item.kind || item.kind === 'image'){
       try {
         const img = new Image();
         img.decoding = 'async';
@@ -78,39 +74,36 @@ export default function Carousel({
         cacheRef.current.set(url, { ok: true, type: 'image' });
         return true;
       } catch {
-        // mesmo se falhar decode(), tentamos marcar ok ao carregar onload
-        return new Promise((resolve) => {
+        // fallback se decode() não estiver disponível
+        return new Promise(resolve => {
           const img = new Image();
-          img.onload = () => {
-            if (!signal?.aborted) {
-              cacheRef.current.set(url, { ok: true, type: 'image' });
-              resolve(true);
-            } else resolve(false);
-          };
+          img.onload = () => { if (!signal?.aborted) cacheRef.current.set(url, {ok:true, type:'image'}); resolve(!signal?.aborted); };
           img.onerror = () => resolve(false);
           img.src = url;
         });
       }
     }
 
-    // Vídeo
-    if (item.type === 'video') {
-      return new Promise((resolve) => {
+    if (item.kind === 'video'){
+      return new Promise(resolve => {
         const v = document.createElement('video');
         v.preload = 'auto';
         v.muted = true;
         v.src = url;
         let done = false;
-        const finish = (ok) => {
+        const finish = ok => {
           if (done) return;
           done = true;
-          if (!signal?.aborted && ok) cacheRef.current.set(url, { ok: true, type: 'video' });
+          if (!signal?.aborted && ok) cacheRef.current.set(url, { ok:true, type:'video' });
           resolve(ok && !signal?.aborted);
         };
         const to = setTimeout(() => finish(true), 1200); // timeout de segurança
-        v.addEventListener('canplaythrough', () => { clearTimeout(to); finish(true); }, { once: true });
-        v.addEventListener('error', () => { clearTimeout(to); finish(false); }, { once: true });
-        // força carregamento
+        v.addEventListener('canplaythrough', () => { clearTimeout(to); try{
+          // guarda uma estimativa de duração (útil pra curDurationMs)
+          const dur = Number(v.duration);
+          if (Number.isFinite(dur)) vidDurMetaRef.current = dur;
+        }catch{} finish(true); }, { once:true });
+        v.addEventListener('error', () => { clearTimeout(to); finish(false); }, { once:true });
         v.load?.();
       });
     }
@@ -118,29 +111,38 @@ export default function Carousel({
     return true;
   }
 
-  function scheduleNext() {
-    clearTimer();
-    if (list.length <= 1) return;
+  function clearTimer(){
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = null;
+    if (nextAbortRef.current) nextAbortRef.current.aborted = true;
+    nextAbortRef.current = null;
+  }
 
-    const cur = list[idx];
-    const dur = Math.max(1500, Number(cur?.durationMs ?? intervalMs));
+  // 4) Agenda troca com fade após pré-carregar o próximo
+  useEffect(() => {
+    if (!ready || items.length <= 1) return;
+    clearTimer();
+
+    const cur = items[idx];
+    const dur = curDurationMs(cur);
+
     timerRef.current = setTimeout(async () => {
-      const next = (idx + 1) % list.length;
-      // Pré-carrega o próximo antes de trocar (com abort handle)
+      const nextIdx = (idx + 1) % items.length;
       const ab = { aborted: false };
       nextAbortRef.current = ab;
-      await preload(list[next], ab);
+      await preload(items[nextIdx], ab);
 
-      // Faz a troca com fade
-      if (!reduceMotion) setFading(true);
-      setFrontIsA((v) => !v);
-      // pequena janela de fade
+      setFading(true);
+      setFrontIsA(v => !v);
       setTimeout(() => {
-        setIdx(next);
+        setIdx(nextIdx);
         setFading(false);
-      }, reduceMotion ? 0 : transitionMs);
+      }, FADE_MS);
     }, dur);
-  }
+
+    return clearTimer;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, idx, items]);
 
   if (!ready) {
     return (
@@ -168,73 +170,55 @@ export default function Carousel({
     );
   }
 
-  const cur = list[idx];
-  const next = list[(idx + 1) % list.length];
+  const cur = items[idx];
+  const nxt = items[(idx + 1) % items.length];
 
   return (
     <div className="stories-frame">
-      {/* Camada A */}
-      <Layer
-        active={frontIsA}
-        fading={fading && frontIsA}
-        item={cur}
-        transitionMs={transitionMs}
-      />
-      {/* Camada B (mostra o próximo já carregado quando alterna) */}
-      <Layer
-        active={!frontIsA}
-        fading={fading && !frontIsA}
-        item={next}
-        transitionMs={transitionMs}
-        isBack
-      />
+      {/* Camada A (frente) */}
+      <Layer item={cur} active={frontIsA} fading={fading && frontIsA} />
+
+      {/* Camada B (fundo) com o próximo já pré-carregado */}
+      <Layer item={nxt} active={!frontIsA} fading={fading && !frontIsA} isBack />
+
       <style jsx>{`
         .stories-frame{
           position: relative; width: 100%; height: 100%;
           border-radius: 12px; overflow: hidden;
           background: rgba(0,0,0,0.25);
-          /* fallback para webview sem aspect-ratio controlado externamente */
         }
       `}</style>
     </div>
   );
 }
 
-/** Uma camada (A ou B) que ocupa todo o espaço e faz fade por opacity */
-function Layer({ item, active, fading, transitionMs, isBack }) {
+function Layer({ item, active, fading }) {
   const [loaded, setLoaded] = useState(false);
-  const refVid = useRef(null);
+  const vref = useRef(null);
+
+  useEffect(() => { setLoaded(false); }, [item?.url]);
 
   useEffect(() => {
-    setLoaded(false);
-  }, [item?.url]);
-
-  // Quando o vídeo ficar pronto, marcar loaded
-  useEffect(() => {
-    if (!item || item.type !== 'video') return;
-    const v = refVid.current;
+    if (!item || item.kind !== 'video') return;
+    const v = vref.current;
     if (!v) return;
     const onReady = () => setLoaded(true);
-    v.muted = true; v.playsInline = true;
-    v.preload = "auto";
-    v.addEventListener('canplaythrough', onReady, { once: true });
+    v.muted = true; v.playsInline = true; v.preload = 'auto';
+    v.addEventListener('canplaythrough', onReady, { once:true });
     v.load?.();
-    return () => { v.removeEventListener('canplaythrough', onReady); };
-  }, [item?.url, item?.type]);
+    return () => v.removeEventListener('canplaythrough', onReady);
+  }, [item?.url, item?.kind]);
 
-  const isImg = !item?.type || item?.type === 'image';
+  const isImg = !item?.kind || item?.kind === 'image';
   const show = isImg ? true : loaded;
 
   return (
-    <div
-      className={[
-        "layer",
-        active ? "is-front" : "is-back",
-        fading ? "is-fading" : "",
-        show ? "is-ready" : "is-loading"
-      ].join(" ")}
-      style={{ transitionDuration: `${transitionMs}ms` }}
-    >
+    <div className={[
+      'layer',
+      active ? 'is-front' : 'is-back',
+      fading ? 'is-fading' : '',
+      show ? 'is-ready' : 'is-loading'
+    ].join(' ')}>
       {isImg ? (
         <img
           src={item?.url}
@@ -247,7 +231,7 @@ function Layer({ item, active, fading, transitionMs, isBack }) {
         />
       ) : (
         <video
-          ref={refVid}
+          ref={vref}
           className="media"
           src={item?.url}
           autoPlay
@@ -262,9 +246,8 @@ function Layer({ item, active, fading, transitionMs, isBack }) {
       <style jsx>{`
         .layer{
           position: absolute; inset: 0;
-          opacity: 0;
-          transform: scale(1.01);
-          transition-property: opacity, transform;
+          opacity: 0; transform: scale(1.01);
+          transition: opacity ${FADE_MS}ms, transform ${FADE_MS}ms;
           will-change: opacity, transform;
         }
         .layer.is-front{ z-index: 2; }
@@ -275,22 +258,18 @@ function Layer({ item, active, fading, transitionMs, isBack }) {
         .media{
           position: absolute; inset: 0;
           width: 100%; height: 100%;
-          object-fit: cover;               /* preenche todo o box sem bordas */
-          object-position: center;
-          display: block;
-          background: #000;
+          object-fit: cover; object-position: center;
+          display: block; background: #000;
         }
         .shade{
           position: absolute; inset: 0;
           background: rgba(0,0,0,.15);
         }
 
-        /* Reduz movimento para acessibilidade */
-        @media (prefers-reduced-motion: reduce) {
+        @media (prefers-reduced-motion: reduce){
           .layer{ transition: none !important; }
         }
       `}</style>
     </div>
   );
 }
-
