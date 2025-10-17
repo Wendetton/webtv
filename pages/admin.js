@@ -96,7 +96,6 @@ export default function Admin() {
       <YTLiveVolume />
 
       <CarouselManager />
-      <ImageUploader />
       <AnnounceSettings />
 
       {/* (opcional) pode exibir o histórico aqui se quiser */}
