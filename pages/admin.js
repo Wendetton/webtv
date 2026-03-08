@@ -43,7 +43,7 @@ const styles = {
   logoIcon: {
     width: 40,
     height: 40,
-    background: "linear-gradient(135deg, #22c55e 0%, #16a34a 100%)",
+    background: "linear-gradient(135deg, #5bb8d4 0%, #2563eb 100%)",
     borderRadius: 10,
     display: "grid",
     placeItems: "center",
@@ -70,8 +70,8 @@ const styles = {
     alignItems: "center",
     gap: 8,
     padding: "8px 14px",
-    background: "rgba(34, 197, 94, 0.1)",
-    border: "1px solid rgba(34, 197, 94, 0.2)",
+    background: "rgba(59, 130, 246, 0.1)",
+    border: "1px solid rgba(59, 130, 246, 0.2)",
     borderRadius: 20,
     fontSize: 13,
     fontWeight: 600,
@@ -79,7 +79,7 @@ const styles = {
   tvStatusDot: {
     width: 8,
     height: 8,
-    background: "#22c55e",
+    background: "#3b82f6",
     borderRadius: "50%",
   },
   btnConfig: {
@@ -250,7 +250,7 @@ function YTLiveVolume() {
         </div>
         <p style={{ marginTop: 12, fontSize: 12, color: "#94a3b8", lineHeight: 1.4 }}>
           Ajuste o volume dos vídeos do YouTube na TV.
-          {saving && <span style={{ marginLeft: 8, color: "#22c55e" }}>Salvando...</span>}
+          {saving && <span style={{ marginLeft: 8, color: "#3b82f6" }}>Salvando...</span>}
         </p>
       </div>
     </div>
