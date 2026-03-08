@@ -309,7 +309,7 @@ export default function Admin() {
           <div style={styles.logoArea}>
             <div style={styles.logoIcon}>📢</div>
             <div>
-              <h1 style={styles.logoTextH1}>São Peregrino</h1>
+              <h1 style={styles.logoTextH1}>Oftalmocenter</h1>
               <span style={styles.logoTextSpan}>Painel de Chamadas</span>
             </div>
           </div>
