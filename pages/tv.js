@@ -10,13 +10,13 @@ import Carousel from '../components/Carousel';
 const GROUP_WINDOW_MS = 30000;
 const DUAL_KEEP_MS = 60000;
 
-// Cores padrão baseadas na logo São Peregrino
+// Cores padrão baseadas na logo Oftalmocenter
 const DEFAULT_COLORS = {
-  bg: '#0a1a14',
-  panel: '#0d2118',
-  accent: '#5cb85c',
+  bg: '#080c12',
+  panel: '#0d1520',
+  accent: '#5bb8d4',
   text: '#fefefe',
-  room: '#2d5a3d',
+  room: '#3b7cb8',
 };
 
 function enqueueAudio(audioQueueRef, playingRef, nome, sala) {
