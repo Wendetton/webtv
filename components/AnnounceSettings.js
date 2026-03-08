@@ -1,25 +1,39 @@
-// components/AnnounceSettings.js — Configurações do anúncio (com idleSeconds 60–300)
-// 2025-08-15
+// components/AnnounceSettings.js - Configurações personalizadas da TV
 import { useEffect, useState } from 'react';
 import { db } from '../utils/firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 
+// Cores padrão baseadas na logo São Peregrino
+const DEFAULT_COLORS = {
+  bg: '#0a1a14',        // Fundo escuro com tom verde
+  panel: '#0d2118',     // Painel escuro esverdeado
+  accent: '#5cb85c',    // Verde claro da logo
+  text: '#fefefe',      // Texto branco
+  room: '#2d5a3d',      // Verde escuro da logo para consultório
+};
+
 export default function AnnounceSettings() {
-  const [open, setOpen] = useState(false);           // painel recolhível
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [loadError, setLoadError] = useState('');
 
-  // campos
-  const [announceMode, setAnnounceMode] = useState('auto'); // auto | beep | off (seu tv-ducking usa 'auto'/'beep')
+  // Frase do anúncio
   const [announceTemplate, setAnnounceTemplate] = useState('Atenção: paciente {{nome}}. Dirija-se à sala {{salaTxt}}.');
-  const [duckVolume, setDuckVolume] = useState(20);      // 0–100
-  const [restoreVolume, setRestoreVolume] = useState(60);// 0–100
-  const [leadMs, setLeadMs] = useState(450);             // ms
-  const [accentColor, setAccentColor] = useState('#44b2e7');
-  const [idleSeconds, setIdleSeconds] = useState(120);   // NOVO: 60–300
 
-  // carregar config/main
+  // Personalização do Consultório
+  const [roomFontSize, setRoomFontSize] = useState(100);
+  const [roomColor, setRoomColor] = useState(DEFAULT_COLORS.room);
+
+  // Tempo do carrossel
+  const [carouselDuration, setCarouselDuration] = useState(7);
+
+  // Cores do layout da TV
+  const [tvBgColor, setTvBgColor] = useState(DEFAULT_COLORS.bg);
+  const [tvPanelColor, setTvPanelColor] = useState(DEFAULT_COLORS.panel);
+  const [tvAccentColor, setTvAccentColor] = useState(DEFAULT_COLORS.accent);
+  const [tvTextColor, setTvTextColor] = useState(DEFAULT_COLORS.text);
+
+  // Carregar config/main
   useEffect(() => {
     (async () => {
       try {
@@ -27,16 +41,17 @@ export default function AnnounceSettings() {
         const snap = await getDoc(ref);
         if (snap.exists()) {
           const data = snap.data() || {};
-          if (data.announceMode) setAnnounceMode(String(data.announceMode));
           if (data.announceTemplate) setAnnounceTemplate(String(data.announceTemplate));
-          if (Number.isFinite(data.duckVolume)) setDuckVolume(Number(data.duckVolume));
-          if (Number.isFinite(data.restoreVolume)) setRestoreVolume(Number(data.restoreVolume));
-          if (Number.isFinite(data.leadMs)) setLeadMs(Number(data.leadMs));
-          if (data.accentColor) setAccentColor(String(data.accentColor));
-          if (Number.isFinite(data.idleSeconds)) setIdleSeconds(Math.min(300, Math.max(60, Number(data.idleSeconds))));
+          if (Number.isFinite(data.roomFontSize)) setRoomFontSize(Number(data.roomFontSize));
+          if (data.roomColor) setRoomColor(String(data.roomColor));
+          if (Number.isFinite(data.carouselDuration)) setCarouselDuration(Number(data.carouselDuration));
+          if (data.tvBgColor) setTvBgColor(String(data.tvBgColor));
+          if (data.tvPanelColor) setTvPanelColor(String(data.tvPanelColor));
+          if (data.tvAccentColor) setTvAccentColor(String(data.tvAccentColor));
+          if (data.tvTextColor) setTvTextColor(String(data.tvTextColor));
         }
       } catch (err) {
-        setLoadError('Não foi possível carregar as configurações (verifique as permissões do Firestore).');
+        setLoadError('Não foi possível carregar as configurações.');
       }
     })();
   }, []);
@@ -48,109 +63,290 @@ export default function AnnounceSettings() {
     try {
       const ref = doc(db, 'config', 'main');
       await setDoc(ref, {
-        announceMode,
         announceTemplate,
-        duckVolume: Number(duckVolume),
-        restoreVolume: Number(restoreVolume),
-        leadMs: Number(leadMs),
-        accentColor: String(accentColor),
-        idleSeconds: Math.min(300, Math.max(60, Number(idleSeconds))), // clamp 60–300
+        roomFontSize: Number(roomFontSize),
+        roomColor: String(roomColor),
+        carouselDuration: Number(carouselDuration),
+        tvBgColor: String(tvBgColor),
+        tvPanelColor: String(tvPanelColor),
+        tvAccentColor: String(tvAccentColor),
+        tvTextColor: String(tvTextColor),
       }, { merge: true });
       setSaved(true);
-      setTimeout(() => setSaved(false), 1800);
+      setTimeout(() => setSaved(false), 2000);
     } catch (err) {
-      setLoadError('Falha ao salvar (verifique permissões do Firestore).');
+      setLoadError('Falha ao salvar.');
     } finally {
       setSaving(false);
     }
   }
 
-  // estilos simples
-  const wrap = { marginTop: 24, border: '1px solid rgba(255,255,255,0.12)', borderRadius: 12, overflow: 'hidden' };
-  const header = { padding: '12px 14px', display:'flex', alignItems:'center', justifyContent:'space-between', cursor:'pointer', background:'rgba(255,255,255,0.04)', fontWeight:800 };
-  const body = { padding: 16, display: open ? 'block' : 'none' };
-  const grid2 = { display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 };
-  const row = { display:'grid', gap:6, marginBottom:12 };
-  const input = { padding:'10px 12px', borderRadius:8, border:'1px solid rgba(255,255,255,0.15)', background:'rgba(255,255,255,0.05)', color:'inherit' };
-  const btnPrimary = { padding:'10px 14px', borderRadius:10, border:'none', background:'#22c55e', color:'#0b2b14', fontWeight:800, cursor:'pointer' };
+  function resetColors() {
+    setTvBgColor(DEFAULT_COLORS.bg);
+    setTvPanelColor(DEFAULT_COLORS.panel);
+    setTvAccentColor(DEFAULT_COLORS.accent);
+    setTvTextColor(DEFAULT_COLORS.text);
+    setRoomColor(DEFAULT_COLORS.room);
+  }
 
   return (
-    <section style={wrap}>
-      <div style={header} onClick={() => setOpen(!open)}>
-        <span>Configurações do anúncio</span>
-        <span style={{opacity:.7, fontSize:13}}>{open ? 'recolher ▲' : 'expandir ▼'}</span>
-      </div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+      {loadError && <div style={{ color: '#f87171', fontSize: 14, marginBottom: 12 }}>{loadError}</div>}
 
-      <div style={body}>
-        {loadError && <div style={{color:'#f87171', marginBottom:10}}>{loadError}</div>}
-
-        {/* Linha 1: modo + cor */}
-        <div style={grid2}>
-          <div style={row}>
-            <label>Modo de anúncio</label>
-            <select value={announceMode} onChange={e=>setAnnounceMode(e.target.value)} style={input}>
-              <option value="auto">Automático (voz + beep, ducking)</option>
-              <option value="beep">Som simples (beep)</option>
-              <option value="off">Sem som</option>
-            </select>
-          </div>
-          <div style={row}>
-            <label>Cor de destaque (TV)</label>
-            <input type="color" value={accentColor} onChange={e=>setAccentColor(e.target.value)} style={{...input, padding:'6px'}} />
-          </div>
+      {/* Frase do Anúncio */}
+      <section style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 14, padding: 20 }}>
+        <div style={{ fontSize: 14, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span>🔊</span> Frase do Anúncio
         </div>
-
-        {/* Template */}
-        <div style={row}>
-          <label>Frase do anúncio (template)</label>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
+          <label style={{ fontSize: 14, fontWeight: 600, color: '#e2e8f0' }}>Template da mensagem de voz</label>
           <textarea
             value={announceTemplate}
             onChange={(e) => setAnnounceTemplate(e.target.value)}
             rows={3}
-            style={{...input, fontFamily:'inherit'}}
+            style={{
+              padding: '14px 16px',
+              background: 'rgba(255,255,255,0.03)',
+              border: '2px solid rgba(255,255,255,0.12)',
+              borderRadius: 10,
+              color: '#f8fafc',
+              fontSize: 14,
+              fontFamily: 'inherit',
+              resize: 'vertical',
+              minHeight: 80,
+            }}
           />
-          <div style={{opacity:.8, fontSize:12}}>
-            Use <code>{'{{nome}}'}</code>, <code>{'{{sala}}'}</code> e <code>{'{{salaTxt}}'}</code>.
-            Ex.: Atenção: paciente <b>{'{{nome}}'}</b>. Dirija-se à sala <b>{'{{sala}}'}</b>.
+          <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>
+            Use <code style={{ background: 'rgba(255,255,255,0.1)', padding: '2px 6px', borderRadius: 4 }}>{'{{nome}}'}</code> para o nome, 
+            <code style={{ background: 'rgba(255,255,255,0.1)', padding: '2px 6px', borderRadius: 4, marginLeft: 4 }}>{'{{sala}}'}</code> para o número e 
+            <code style={{ background: 'rgba(255,255,255,0.1)', padding: '2px 6px', borderRadius: 4, marginLeft: 4 }}>{'{{salaTxt}}'}</code> para "número X".
           </div>
         </div>
+      </section>
 
-        {/* Linha 2: volumes */}
-        <div style={grid2}>
-          <div style={row}>
-            <label>Volume do vídeo durante o anúncio (ducking)</label>
-            <input type="range" min={0} max={100} value={duckVolume} onChange={e=>setDuckVolume(Number(e.target.value))} />
-            <div style={{fontSize:12, opacity:.8}}>{duckVolume}%</div>
+      {/* Personalização do Consultório */}
+      <section style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 14, padding: 20 }}>
+        <div style={{ fontSize: 14, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span>🏥</span> Texto do Consultório
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <label style={{ fontSize: 14, fontWeight: 600, color: '#e2e8f0' }}>Tamanho da fonte</label>
+            <input
+              type="range"
+              min={50}
+              max={150}
+              step={5}
+              value={roomFontSize}
+              onChange={(e) => setRoomFontSize(Number(e.target.value))}
+              style={{ width: '100%', accentColor: '#22c55e' }}
+            />
+            <div style={{ fontSize: 13, color: '#94a3b8', textAlign: 'right' }}>{roomFontSize}%</div>
           </div>
-          <div style={row}>
-            <label>Volume do vídeo após o anúncio</label>
-            <input type="range" min={0} max={100} value={restoreVolume} onChange={e=>setRestoreVolume(Number(e.target.value))} />
-            <div style={{fontSize:12, opacity:.8}}>{restoreVolume}%</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <label style={{ fontSize: 14, fontWeight: 600, color: '#e2e8f0' }}>Cor do texto</label>
+            <input
+              type="color"
+              value={roomColor}
+              onChange={(e) => setRoomColor(e.target.value)}
+              style={{
+                width: '100%',
+                height: 44,
+                padding: 4,
+                background: 'rgba(255,255,255,0.03)',
+                border: '2px solid rgba(255,255,255,0.12)',
+                borderRadius: 10,
+                cursor: 'pointer',
+              }}
+            />
           </div>
         </div>
+        {/* Preview */}
+        <div style={{
+          marginTop: 12,
+          padding: 16,
+          borderRadius: 10,
+          background: tvPanelColor,
+          border: `2px solid ${tvAccentColor}`,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          flexDirection: 'column',
+          gap: 8,
+        }}>
+          <span style={{ fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>Preview:</span>
+          <span style={{
+            fontSize: `${Math.round(24 * roomFontSize / 100)}px`,
+            fontWeight: 800,
+            color: roomColor,
+          }}>
+            Consultório 1
+          </span>
+        </div>
+      </section>
 
-        {/* Linha 3: lead e idle */}
-        <div style={grid2}>
-          <div style={row}>
-            <label>Antecipação do ducking (ms)</label>
-            <input type="number" min={0} max={2000} step={50} value={leadMs} onChange={e=>setLeadMs(Number(e.target.value))} style={input} />
+      {/* Tempo do Carrossel */}
+      <section style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 14, padding: 20 }}>
+        <div style={{ fontSize: 14, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span>🖼️</span> Carrossel de Imagens
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <label style={{ fontSize: 14, fontWeight: 600, color: '#e2e8f0' }}>Tempo de exibição de cada imagem</label>
+          <input
+            type="range"
+            min={3}
+            max={30}
+            step={1}
+            value={carouselDuration}
+            onChange={(e) => setCarouselDuration(Number(e.target.value))}
+            style={{ width: '100%', accentColor: '#22c55e' }}
+          />
+          <div style={{ fontSize: 13, color: '#94a3b8', textAlign: 'right' }}>{carouselDuration} segundos</div>
+        </div>
+      </section>
+
+      {/* Cores do Layout */}
+      <section style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 14, padding: 20 }}>
+        <div style={{ fontSize: 14, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span>🎨</span> Cores do Layout da TV
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <input
+              type="color"
+              value={tvBgColor}
+              onChange={(e) => setTvBgColor(e.target.value)}
+              style={{
+                width: '100%',
+                height: 44,
+                padding: 4,
+                background: 'rgba(255,255,255,0.03)',
+                border: '2px solid rgba(255,255,255,0.12)',
+                borderRadius: 10,
+                cursor: 'pointer',
+              }}
+            />
+            <span style={{ fontSize: 12, color: '#94a3b8', textAlign: 'center' }}>Fundo</span>
           </div>
-
-          {/* NOVO: tempo para voltar ao logo */}
-          <div style={row}>
-            <label>Tempo para voltar ao logo (segundos)</label>
-            <input type="range" min={60} max={300} step={10} value={idleSeconds} onChange={e=>setIdleSeconds(Number(e.target.value))} />
-            <div style={{fontSize:12, opacity:.8}}>{idleSeconds} s</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <input
+              type="color"
+              value={tvPanelColor}
+              onChange={(e) => setTvPanelColor(e.target.value)}
+              style={{
+                width: '100%',
+                height: 44,
+                padding: 4,
+                background: 'rgba(255,255,255,0.03)',
+                border: '2px solid rgba(255,255,255,0.12)',
+                borderRadius: 10,
+                cursor: 'pointer',
+              }}
+            />
+            <span style={{ fontSize: 12, color: '#94a3b8', textAlign: 'center' }}>Painel</span>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <input
+              type="color"
+              value={tvAccentColor}
+              onChange={(e) => setTvAccentColor(e.target.value)}
+              style={{
+                width: '100%',
+                height: 44,
+                padding: 4,
+                background: 'rgba(255,255,255,0.03)',
+                border: '2px solid rgba(255,255,255,0.12)',
+                borderRadius: 10,
+                cursor: 'pointer',
+              }}
+            />
+            <span style={{ fontSize: 12, color: '#94a3b8', textAlign: 'center' }}>Destaque</span>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <input
+              type="color"
+              value={tvTextColor}
+              onChange={(e) => setTvTextColor(e.target.value)}
+              style={{
+                width: '100%',
+                height: 44,
+                padding: 4,
+                background: 'rgba(255,255,255,0.03)',
+                border: '2px solid rgba(255,255,255,0.12)',
+                borderRadius: 10,
+                cursor: 'pointer',
+              }}
+            />
+            <span style={{ fontSize: 12, color: '#94a3b8', textAlign: 'center' }}>Texto</span>
           </div>
         </div>
+        {/* Preview do layout */}
+        <div style={{
+          marginTop: 16,
+          padding: 16,
+          borderRadius: 10,
+          background: tvBgColor,
+          border: `2px solid ${tvAccentColor}`,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          flexDirection: 'column',
+          gap: 8,
+        }}>
+          <span style={{ fontSize: 12, color: '#94a3b8', marginBottom: 8 }}>Preview do layout:</span>
+          <div style={{
+            background: tvPanelColor,
+            padding: '12px 20px',
+            borderRadius: 8,
+            border: `1px solid ${tvAccentColor}`,
+            textAlign: 'center',
+          }}>
+            <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 4 }}>CHAMANDO AGORA</div>
+            <div style={{ fontSize: 18, fontWeight: 800, color: tvTextColor }}>Maria da Silva</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: roomColor, marginTop: 4 }}>Consultório 2</div>
+          </div>
+        </div>
+      </section>
 
-        <div style={{marginTop:8}}>
-          <button onClick={save} disabled={saving} style={btnPrimary}>
-            {saving ? 'Salvando…' : 'Salvar'}
+      {/* Footer */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, marginTop: 8 }}>
+        <button
+          onClick={resetColors}
+          style={{
+            padding: '10px 16px',
+            background: 'rgba(255,255,255,0.05)',
+            border: '1px solid rgba(255,255,255,0.12)',
+            borderRadius: 8,
+            color: '#94a3b8',
+            fontSize: 13,
+            fontWeight: 600,
+            fontFamily: 'inherit',
+            cursor: 'pointer',
+          }}
+        >
+          Restaurar cores padrão
+        </button>
+        <div style={{ display: 'flex', alignItems: 'center' }}>
+          <button
+            onClick={save}
+            disabled={saving}
+            style={{
+              padding: '14px 28px',
+              background: 'linear-gradient(135deg, #5cb85c 0%, #2d5a3d 100%)',
+              border: 'none',
+              borderRadius: 12,
+              color: '#ffffff',
+              fontSize: 16,
+              fontWeight: 800,
+              fontFamily: 'inherit',
+              cursor: 'pointer',
+            }}
+          >
+            {saving ? 'Salvando...' : 'Salvar Configurações'}
           </button>
-          {saved && <span style={{marginLeft:10, color:'#4ade80', fontWeight:700}}>Salvo!</span>}
+          {saved && <span style={{ marginLeft: 12, color: '#5cb85c', fontWeight: 700, fontSize: 14 }}>✓ Salvo!</span>}
         </div>
       </div>
-    </section>
+    </div>
   );
 }

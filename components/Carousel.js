@@ -3,7 +3,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { db } from '../utils/firebase';
-import { collection, onSnapshot, orderBy, query } from 'firebase/firestore';
+import { collection, onSnapshot, orderBy, query, doc } from 'firebase/firestore';
 
 const DEFAULT_IMAGE_SEC = 7;
 const DEFAULT_VIDEO_SEC = 12;
@@ -14,6 +14,7 @@ export default function Carousel(){
   const [items, setItems] = useState([]);
   const [idx, setIdx] = useState(0);
   const [ready, setReady] = useState(false);
+  const [configDuration, setConfigDuration] = useState(DEFAULT_IMAGE_SEC); // Duração da config
 
   // Animação/render
   const [fading, setFading] = useState(false);
@@ -23,6 +24,18 @@ export default function Carousel(){
   const nextAbortRef = useRef(null);
   const cacheRef = useRef(new Map()); // url -> { ok: boolean, type: 'image'|'video' }
   const vidDurMetaRef = useRef(null);
+
+  // 0) Carrega duração da config
+  useEffect(() => {
+    const unsub = onSnapshot(doc(db, 'config', 'main'), (snap) => {
+      if (!snap.exists()) return;
+      const data = snap.data() || {};
+      if (Number.isFinite(data.carouselDuration) && data.carouselDuration >= 3) {
+        setConfigDuration(Math.min(30, Math.max(3, Number(data.carouselDuration))));
+      }
+    });
+    return () => unsub();
+  }, []);
 
   // 1) Assina Firestore
   useEffect(() => {
@@ -43,9 +56,9 @@ export default function Carousel(){
     return () => unsub();
   }, []);
 
-  // 2) Duração do item atual
+  // 2) Duração do item atual - usa configDuration se não tiver durationSec específico
   function curDurationMs(cur){
-    if (!cur) return DEFAULT_IMAGE_SEC * 1000;
+    if (!cur) return configDuration * 1000;
     if (Number.isFinite(cur.durationSec) && cur.durationSec > 0) {
       return cur.durationSec * 1000;
     }
@@ -54,7 +67,7 @@ export default function Carousel(){
       if (Number.isFinite(meta) && meta > 0) return Math.min(MAX_VIDEO_SEC, meta) * 1000;
       return DEFAULT_VIDEO_SEC * 1000;
     }
-    return DEFAULT_IMAGE_SEC * 1000;
+    return configDuration * 1000; // Usa duração configurada
   }
 
   // 3) Pré-carrega o próximo
@@ -150,7 +163,7 @@ export default function Carousel(){
 
     return clearTimer;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, idx, items]);
+  }, [ready, idx, items, configDuration]);
 
   if (!ready) {
     return (
