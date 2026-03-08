@@ -3,13 +3,13 @@ import { useEffect, useState } from 'react';
 import { db } from '../utils/firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 
-// Cores padrão baseadas na logo São Peregrino
+// Cores padrão baseadas na logo Oftalmocenter
 const DEFAULT_COLORS = {
-  bg: '#0a1a14',        // Fundo escuro com tom verde
-  panel: '#0d2118',     // Painel escuro esverdeado
-  accent: '#5cb85c',    // Verde claro da logo
-  text: '#fefefe',      // Texto branco
-  room: '#2d5a3d',      // Verde escuro da logo para consultório
+  bg: '#080c12',       // Azul noite (fundo escuro)
+  panel: '#0d1520',    // Azul escuro (painel)
+  accent: '#5bb8d4',   // Azul ciano claro (destaque - cor do "CENTER")
+  text: '#fefefe',     // Branco
+  room: '#3b7cb8',     // Azul médio (consultório)
 };
 
 export default function AnnounceSettings() {
@@ -139,7 +139,7 @@ export default function AnnounceSettings() {
               step={5}
               value={roomFontSize}
               onChange={(e) => setRoomFontSize(Number(e.target.value))}
-              style={{ width: '100%', accentColor: '#22c55e' }}
+              style={{ width: '100%', accentColor: '#3b82f6' }}
             />
             <div style={{ fontSize: 13, color: '#94a3b8', textAlign: 'right' }}>{roomFontSize}%</div>
           </div>
@@ -199,7 +199,7 @@ export default function AnnounceSettings() {
             step={1}
             value={carouselDuration}
             onChange={(e) => setCarouselDuration(Number(e.target.value))}
-            style={{ width: '100%', accentColor: '#22c55e' }}
+            style={{ width: '100%', accentColor: '#3b82f6' }}
           />
           <div style={{ fontSize: 13, color: '#94a3b8', textAlign: 'right' }}>{carouselDuration} segundos</div>
         </div>
@@ -332,7 +332,7 @@ export default function AnnounceSettings() {
             disabled={saving}
             style={{
               padding: '14px 28px',
-              background: 'linear-gradient(135deg, #5cb85c 0%, #2d5a3d 100%)',
+              background: 'linear-gradient(135deg, #5bb8d4 0%, #2563eb 100%)',
               border: 'none',
               borderRadius: 12,
               color: '#ffffff',
@@ -344,7 +344,7 @@ export default function AnnounceSettings() {
           >
             {saving ? 'Salvando...' : 'Salvar Configurações'}
           </button>
-          {saved && <span style={{ marginLeft: 12, color: '#5cb85c', fontWeight: 700, fontSize: 14 }}>✓ Salvo!</span>}
+          {saved && <span style={{ marginLeft: 12, color: '#5bb8d4', fontWeight: 700, fontSize: 14 }}>✓ Salvo!</span>}
         </div>
       </div>
     </div>
