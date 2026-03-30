@@ -1,7 +1,8 @@
-// pages/tv.js - Versão ULTRA otimizada para Fire TV (apenas YouTube)
+// pages/tv.js - Versão CORRIGIDA para Fire TV
+// ✅ Fixes: heartbeat auto-reload, cleanup de listeners, sem memory leaks
 import Head from 'next/head';
 import Script from 'next/script';
-import { useEffect, useRef, useState, memo } from 'react';
+import { useEffect, useRef, useState, memo, useCallback } from 'react';
 import { db } from '../utils/firebase';
 import { collection, query, orderBy, limit, onSnapshot, doc } from 'firebase/firestore';
 import YoutubePlayer from '../components/YoutubePlayer';
@@ -10,7 +11,6 @@ import Carousel from '../components/Carousel';
 const GROUP_WINDOW_MS = 30000;
 const DUAL_KEEP_MS = 60000;
 
-// Cores padrão baseadas na logo Oftalmocenter
 const DEFAULT_COLORS = {
   bg: '#080c12',
   panel: '#0d1520',
@@ -38,7 +38,6 @@ function playQueue(audioQueueRef, playingRef) {
   setTimeout(() => { playingRef.current = false; playQueue(audioQueueRef, playingRef); }, 4500);
 }
 
-// Componentes memoizados para evitar re-renders desnecessários (otimização Fire TV)
 const MemoizedCarousel = memo(Carousel);
 const MemoizedYoutube = memo(YoutubePlayer);
 
@@ -56,7 +55,7 @@ export default function TV() {
   const [roomFontSize, setRoomFontSize] = useState(100);
   const [roomColor, setRoomColor] = useState(DEFAULT_COLORS.room);
 
-  // Relógio - atualiza a cada 10 segundos (reduz re-renders para Fire TV)
+  // Relógio - atualiza a cada 10 segundos
   const [nowMs, setNowMs] = useState(Date.now());
   useEffect(() => { 
     const t = setInterval(() => setNowMs(Date.now()), 10000); 
@@ -69,10 +68,54 @@ export default function TV() {
   const audioQueueRef = useRef([]);
   const playingRef = useRef(false);
 
+  // ✅ FIX 1: HEARTBEAT - Detecta perda de conexão Firebase e recarrega
+  useEffect(() => {
+    let lastFirestoreUpdate = Date.now();
+    const HEARTBEAT_TIMEOUT = 5 * 60 * 1000; // 5 minutos sem atualização = reload
+    
+    // Atualiza timestamp quando qualquer snapshot chega
+    window._tvHeartbeat = () => { lastFirestoreUpdate = Date.now(); };
+    
+    const checker = setInterval(() => {
+      const elapsed = Date.now() - lastFirestoreUpdate;
+      // Se passou muito tempo sem nenhum snapshot do Firestore,
+      // provavelmente a conexão travou silenciosamente
+      if (elapsed > HEARTBEAT_TIMEOUT) {
+        console.warn('[TV] Heartbeat: sem updates há', Math.round(elapsed/1000), 's — recarregando');
+        window.location.reload();
+      }
+    }, 60000); // Checa a cada 1 minuto
+    
+    return () => clearInterval(checker);
+  }, []);
+
+  // ✅ FIX 2: Visibilidade — quando a tela "acorda", verifica se precisa reload
+  useEffect(() => {
+    function handleVisibility() {
+      if (document.visibilityState === 'visible') {
+        // Força re-render do relógio
+        setNowMs(Date.now());
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, []);
+
+  // ✅ FIX 3: Detecção de conexão online/offline
+  useEffect(() => {
+    function handleOnline() {
+      console.log('[TV] Conexão restaurada — recarregando em 5s');
+      setTimeout(() => window.location.reload(), 5000);
+    }
+    window.addEventListener('online', handleOnline);
+    return () => window.removeEventListener('online', handleOnline);
+  }, []);
+
   // Historico
   useEffect(() => {
     const qCalls = query(collection(db, 'calls'), orderBy('timestamp', 'desc'), limit(6));
     const unsub = onSnapshot(qCalls, (snap) => {
+      if (window._tvHeartbeat) window._tvHeartbeat(); // ✅ Heartbeat
       const raw = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       const list = raw.filter(x => !x.test);
       setHistory(list);
@@ -84,6 +127,9 @@ export default function TV() {
         setLastCallAt(null);
       }
       if (!initCallsRef.current) initCallsRef.current = true;
+    }, (err) => {
+      // ✅ FIX: Trata erro de snapshot (conexão perdida)
+      console.error('[TV] Erro no snapshot de calls:', err);
     });
     return () => unsub();
   }, []);
@@ -91,6 +137,7 @@ export default function TV() {
   // Gatilho de anuncio
   useEffect(() => {
     const unsub = onSnapshot(doc(db, 'config', 'announce'), (snap) => {
+      if (window._tvHeartbeat) window._tvHeartbeat(); // ✅ Heartbeat
       if (!snap.exists()) return;
       const d = snap.data();
       const nonce = String(d.nonce || '');
@@ -107,6 +154,8 @@ export default function TV() {
         }
       }
       if (typeof d.idle === 'boolean') setForcedIdle(Boolean(d.idle));
+    }, (err) => {
+      console.error('[TV] Erro no snapshot de announce:', err);
     });
     return () => unsub();
   }, []);
@@ -114,11 +163,13 @@ export default function TV() {
   // Config - consolidado em um único listener
   useEffect(() => {
     const unsub = onSnapshot(doc(db, 'config', 'main'), (snap) => {
+      if (window._tvHeartbeat) window._tvHeartbeat(); // ✅ Heartbeat
       if (!snap.exists()) return;
       const data = snap.data();
       if (!data) return;
       
       const cfg = {
+        announceMode: data.announceMode || 'auto',
         announceTemplate: data.announceTemplate || 'Atenção: paciente {{nome}}. Dirija-se à sala {{salaTxt}}.',
         duckVolume: Number.isFinite(data.duckVolume) ? Number(data.duckVolume) : 20,
         restoreVolume: Number.isFinite(data.restoreVolume) ? Number(data.restoreVolume) : 60,
@@ -133,7 +184,6 @@ export default function TV() {
         tvTextColor: data.tvTextColor || DEFAULT_COLORS.text,
       };
       
-      // Aplica cores via CSS variables
       const root = document.documentElement;
       root.style.setProperty('--tv-bg', cfg.tvBgColor);
       root.style.setProperty('--tv-panel', cfg.tvPanelColor);
@@ -148,6 +198,8 @@ export default function TV() {
       setRoomColor(cfg.roomColor);
       
       if (typeof window !== 'undefined') window.tvConfig = { ...cfg };
+    }, (err) => {
+      console.error('[TV] Erro no snapshot de config:', err);
     });
     return () => unsub();
   }, []);
@@ -156,6 +208,7 @@ export default function TV() {
   useEffect(() => {
     const ref = doc(db, 'config', 'control');
     const unsub = onSnapshot(ref, (snap) => {
+      if (window._tvHeartbeat) window._tvHeartbeat(); // ✅ Heartbeat
       if (!snap.exists()) return;
       const d = snap.data();
       if (!Number.isFinite(d.ytVolume)) return;
@@ -178,6 +231,7 @@ export default function TV() {
   useEffect(() => {
     const q = query(collection(db, 'ytPlaylist'), orderBy('order', 'asc'));
     const unsub = onSnapshot(q, (snap) => {
+      if (window._tvHeartbeat) window._tvHeartbeat(); // ✅ Heartbeat
       const list = snap.docs.map(d => ({ id: d.id, ...d.data() }))
         .map(x => String(x.videoId || '').trim())
         .filter(Boolean);
@@ -323,21 +377,19 @@ export default function TV() {
           --room-color: ${DEFAULT_COLORS.room};
           --room-font-scale: 1;
           
-          /* Alturas responsivas baseadas em vh */
           --footer-height: 42vh;
           --main-height: 58vh;
           --gap: 1.2vh;
           --padding: 1.2vh;
         }
 
-        /* ===== OTIMIZAÇÕES GLOBAIS PARA FIRE TV ===== */
+        /* Otimizações globais */
         * {
-          /* Desabilita animações pesadas */
           -webkit-font-smoothing: antialiased;
           -moz-osx-font-smoothing: grayscale;
         }
 
-        /* ===== TELA PRINCIPAL ===== */
+        /* Tela principal */
         .tv-screen {
           width: 100vw;
           height: 100vh;
@@ -345,11 +397,10 @@ export default function TV() {
           flex-direction: column;
           background: var(--tv-bg);
           overflow: hidden;
-          /* GPU acceleration */
           transform: translateZ(0);
         }
 
-        /* ===== AREA PRINCIPAL (Video + Carrossel) ===== */
+        /* Area principal (Video + Carrossel) */
         .tv-main {
           flex: 1;
           display: grid;
@@ -367,9 +418,7 @@ export default function TV() {
           background: #000;
           border-radius: 12px;
           overflow: hidden;
-          /* GPU layer */
           transform: translateZ(0);
-          will-change: transform;
         }
 
         .tv-video > * {
@@ -398,11 +447,10 @@ export default function TV() {
           border: 1px solid rgba(255,255,255,0.08);
           border-radius: 12px;
           overflow: hidden;
-          /* GPU layer */
           transform: translateZ(0);
         }
 
-        /* ===== RODAPE ===== */
+        /* Rodapé */
         .tv-footer {
           height: var(--footer-height);
           background: var(--tv-panel);
@@ -542,7 +590,7 @@ export default function TV() {
           font-weight: 700;
         }
 
-        /* Animações SIMPLIFICADAS para Fire TV */
+        /* Animações */
         @keyframes flashGlow {
           0% { box-shadow: 0 0 0 0 rgba(92,184,92,0.9); }
           100% { box-shadow: 0 0 24px 16px rgba(92,184,92,0.0); }
@@ -552,50 +600,41 @@ export default function TV() {
           animation: flashGlow 0.8s ease-out 2;
         }
 
-        /* Util */
         .muted { 
           color: var(--tv-muted); 
         }
 
-        /* ===== RESPONSIVIDADE ===== */
-        
-        /* TV Vertical / Portrait */
+        /* Responsividade */
         @media (orientation: portrait) {
           .tv-main {
             grid-template-columns: 1fr;
             grid-template-rows: 1fr 1fr;
           }
-          
           :root {
             --footer-height: 35vh;
           }
         }
 
-        /* Telas pequenas */
         @media (max-height: 600px) {
           :root {
             --footer-height: 45vh;
             --padding: 1vh;
             --gap: 1vh;
           }
-          
           #current-call-name {
             font-size: clamp(28px, 8vh, 56px);
           }
-          
           .current-call .sub {
             font-size: clamp(16px, 3vh, 24px);
           }
         }
 
-        /* Fire TV Stick / TV Box */
         @media (min-width: 1280px) and (min-height: 720px) {
           :root {
             --footer-height: 40vh;
           }
         }
 
-        /* 4K TVs */
         @media (min-width: 3000px) {
           :root {
             --footer-height: 38vh;

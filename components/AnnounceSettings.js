@@ -17,6 +17,9 @@ export default function AnnounceSettings() {
   const [saved, setSaved] = useState(false);
   const [loadError, setLoadError] = useState('');
 
+  // Modo de TTS
+  const [announceMode, setAnnounceMode] = useState('auto');
+
   // Frase do anúncio
   const [announceTemplate, setAnnounceTemplate] = useState('Atenção: paciente {{nome}}. Dirija-se à sala {{salaTxt}}.');
 
@@ -42,6 +45,7 @@ export default function AnnounceSettings() {
         if (snap.exists()) {
           const data = snap.data() || {};
           if (data.announceTemplate) setAnnounceTemplate(String(data.announceTemplate));
+          if (data.announceMode) setAnnounceMode(String(data.announceMode));
           if (Number.isFinite(data.roomFontSize)) setRoomFontSize(Number(data.roomFontSize));
           if (data.roomColor) setRoomColor(String(data.roomColor));
           if (Number.isFinite(data.carouselDuration)) setCarouselDuration(Number(data.carouselDuration));
@@ -64,6 +68,7 @@ export default function AnnounceSettings() {
       const ref = doc(db, 'config', 'main');
       await setDoc(ref, {
         announceTemplate,
+        announceMode: String(announceMode),
         roomFontSize: Number(roomFontSize),
         roomColor: String(roomColor),
         carouselDuration: Number(carouselDuration),
@@ -120,6 +125,41 @@ export default function AnnounceSettings() {
             Use <code style={{ background: 'rgba(255,255,255,0.1)', padding: '2px 6px', borderRadius: 4 }}>{'{{nome}}'}</code> para o nome, 
             <code style={{ background: 'rgba(255,255,255,0.1)', padding: '2px 6px', borderRadius: 4, marginLeft: 4 }}>{'{{sala}}'}</code> para o número e 
             <code style={{ background: 'rgba(255,255,255,0.1)', padding: '2px 6px', borderRadius: 4, marginLeft: 4 }}>{'{{salaTxt}}'}</code> para "número X".
+          </div>
+        </div>
+      </section>
+
+      {/* Modo de Voz */}
+      <section style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 14, padding: 20 }}>
+        <div style={{ fontSize: 14, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span>🗣️</span> Motor de Voz (TTS)
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <label style={{ fontSize: 14, fontWeight: 600, color: '#e2e8f0' }}>Método de reprodução de voz</label>
+          <select
+            value={announceMode}
+            onChange={(e) => setAnnounceMode(e.target.value)}
+            style={{
+              padding: '12px 16px',
+              background: 'rgba(255,255,255,0.03)',
+              border: '2px solid rgba(255,255,255,0.12)',
+              borderRadius: 10,
+              color: '#f8fafc',
+              fontSize: 14,
+              fontFamily: 'inherit',
+              cursor: 'pointer',
+            }}
+          >
+            <option value="auto">Automático (detecta o melhor)</option>
+            <option value="google">Google Translate TTS (recomendado p/ FreeKiosk)</option>
+            <option value="fully">Fully Kiosk TTS</option>
+            <option value="web">Web Speech API</option>
+            <option value="beep">Apenas beep</option>
+          </select>
+          <div style={{ fontSize: 12, color: '#64748b', marginTop: 4, lineHeight: 1.5 }}>
+            <strong style={{ color: '#94a3b8' }}>Automático:</strong> Tenta Fully → Google → Web Speech → Beep.<br/>
+            <strong style={{ color: '#94a3b8' }}>Google TTS:</strong> Funciona em qualquer navegador/WebView (FreeKiosk, Silk, etc). Requer internet.<br/>
+            <strong style={{ color: '#94a3b8' }}>Fully TTS:</strong> Apenas no Fully Kiosk Browser.
           </div>
         </div>
       </section>
