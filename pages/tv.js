@@ -30,12 +30,35 @@ function playQueue(audioQueueRef, playingRef) {
   const next = audioQueueRef.current.shift();
   if (!next) return;
   playingRef.current = true;
+
+  // Callback real do TTS (Android APK chama window.tvTTSDone quando termina)
+  // Fallback: timeout baseado no tamanho do texto + margem de segurança
+  const text = String(next.nome || '');
+  const estimatedMs = Math.max(3000, text.length * 65 + 1500);
+  let resolved = false;
+
+  function advance() {
+    if (resolved) return;
+    resolved = true;
+    // Gap de 500ms entre chamadas para clareza
+    setTimeout(() => { playingRef.current = false; playQueue(audioQueueRef, playingRef); }, 500);
+  }
+
+  // Se o APK tiver callback real, tvTTSDone chamará advance
+  const prevDone = window.tvTTSDone;
+  window.tvTTSDone = function() {
+    if (typeof prevDone === 'function') prevDone();
+    advance();
+  };
+
+  // Fallback: se callback não vier, avança pelo timer
+  setTimeout(advance, estimatedMs);
+
   try {
     if (typeof window !== 'undefined' && typeof window.tvAnnounce === 'function') {
-      window.tvAnnounce(String(next.nome || ''), next.sala != null ? String(next.sala) : '');
+      window.tvAnnounce(text, next.sala != null ? String(next.sala) : '');
     }
   } catch {}
-  setTimeout(() => { playingRef.current = false; playQueue(audioQueueRef, playingRef); }, 4500);
 }
 
 // Componentes memoizados para evitar re-renders desnecessários (otimização Fire TV)
@@ -61,6 +84,13 @@ export default function TV() {
   useEffect(() => { 
     const t = setInterval(() => setNowMs(Date.now()), 10000); 
     return () => clearInterval(t); 
+  }, []);
+
+  // Registra Service Worker para resiliência offline
+  useEffect(() => {
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw-tv.js').catch(() => {});
+    }
   }, []);
 
   const initCallsRef = useRef(false);
