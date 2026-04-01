@@ -1,5 +1,6 @@
-// components/YoutubePlayer.js - ULTRA OTIMIZADO para Fire TV
-// Técnicas: qualidade mínima, frame rate reduzido via CSS, GPU offload
+// components/YoutubePlayer.js - CORRIGIDO para Fire TV
+// Removido: setPlaybackQuality (deprecated), animação reduceFrameRate (prejudicial),
+//           filter: contrast (desnecessário), duplicate player creation
 import { useEffect, useRef } from 'react';
 
 export default function YoutubePlayer({ videoId, playlist = [] }) {
@@ -31,44 +32,33 @@ export default function YoutubePlayer({ videoId, playlist = [] }) {
           modestbranding: 1,
           rel: 0,
           fs: 0,
-          iv_load_policy: 3,  // Sem anotações
+          iv_load_policy: 3,
           playsinline: 1,
-          disablekb: 1,       // Sem controles de teclado
+          disablekb: 1,
           enablejsapi: 1,
           origin: typeof window !== 'undefined' ? window.location.origin : '',
-          // Força qualidade mais baixa possível
-          vq: 'tiny',  // tiny = 144p, small = 240p
-          ...(playlist && playlist.length > 0 ? { loop: 1, playlist: playlist.join(',') } : { loop: 1 }),
+          ...(playlist && playlist.length > 0
+            ? { loop: 1, playlist: playlist.join(',') }
+            : { loop: 1 }),
         },
         events: {
           onReady: (ev) => {
             readyRef.current = true;
+            // ✅ FIX: Expõe o player globalmente para tv-ducking.js usar
+            // (não cria player duplicado)
             window.tvYTPlayer = ev.target;
             
-            console.log('[YT] Player pronto - forçando qualidade MÍNIMA');
+            console.log('[YT] Player pronto');
             
             try {
-              // Força a menor qualidade disponível
-              const qualities = ev.target.getAvailableQualityLevels();
-              console.log('[YT] Qualidades disponíveis:', qualities);
-              
-              // Pega a menor qualidade (última da lista)
-              const lowestQuality = qualities[qualities.length - 1] || 'tiny';
-              ev.target.setPlaybackQuality(lowestQuality);
-              
               ev.target.playVideo();
               
               setTimeout(() => {
                 if (!mountedRef.current) return;
                 try {
-                  // Tenta forçar qualidade novamente
-                  ev.target.setPlaybackQuality(lowestQuality);
-                  
                   const vol = (window.tvConfig?.restoreVolume) || 60;
                   ev.target.unMute();
                   ev.target.setVolume(vol);
-                  
-                  console.log('[YT] Qualidade definida:', ev.target.getPlaybackQuality());
                 } catch {}
               }, 3000);
             } catch (e) {
@@ -79,35 +69,20 @@ export default function YoutubePlayer({ videoId, playlist = [] }) {
             const YT = window.YT;
             if (!YT || !mountedRef.current) return;
             
-            // Quando começa a tocar, força qualidade baixa novamente
-            if (ev.data === YT.PlayerState.PLAYING) {
-              try {
-                const qualities = ev.target.getAvailableQualityLevels();
-                const lowestQuality = qualities[qualities.length - 1] || 'tiny';
-                const currentQuality = ev.target.getPlaybackQuality();
-                
-                console.log('[YT] Tocando em:', currentQuality, '| Menor disponível:', lowestQuality);
-                
-                if (currentQuality !== lowestQuality) {
-                  ev.target.setPlaybackQuality(lowestQuality);
-                }
-              } catch {}
-            }
-            
-            // Se pausou inesperadamente, retoma
+            // Se pausou inesperadamente, retoma após delay
             if (ev.data === YT.PlayerState.PAUSED) {
               setTimeout(() => {
                 if (!mountedRef.current) return;
                 try { ev.target.playVideo(); } catch {}
-              }, 1000);
+              }, 1500);
             }
             
-            // Se parou (UNSTARTED), tenta reiniciar
+            // Se ficou UNSTARTED, tenta reiniciar
             if (ev.data === YT.PlayerState.UNSTARTED) {
               setTimeout(() => {
                 if (!mountedRef.current) return;
                 try { ev.target.playVideo(); } catch {}
-              }, 2000);
+              }, 2500);
             }
             
             // Loop para vídeo único
@@ -120,17 +95,19 @@ export default function YoutubePlayer({ videoId, playlist = [] }) {
               }
             }
           },
-          onPlaybackQualityChange: (ev) => {
-            console.log('[YT] Qualidade mudou para:', ev.data);
-          },
           onError: (ev) => {
             console.log('[YT] Erro:', ev.data);
-            // Tenta recuperar após erro
+            // ✅ FIX: Recuperação mais robusta com backoff
             setTimeout(() => {
               if (!mountedRef.current) return;
               try {
-                const id = playlistRef.current?.[0] || videoId;
-                if (id) playerRef.current?.loadVideoById(id);
+                if (playlistRef.current?.length > 0) {
+                  // Se tem playlist, tenta próximo vídeo
+                  playerRef.current?.nextVideo?.();
+                } else {
+                  const id = videoId;
+                  if (id) playerRef.current?.loadVideoById(id);
+                }
               } catch {}
             }, 5000);
           }
@@ -138,6 +115,7 @@ export default function YoutubePlayer({ videoId, playlist = [] }) {
       });
     }
 
+    // ✅ FIX: Carrega YouTube API de forma limpa, sem conflito
     if (window.YT?.Player) {
       create();
     } else {
@@ -146,7 +124,12 @@ export default function YoutubePlayer({ videoId, playlist = [] }) {
         tag.src = 'https://www.youtube.com/iframe_api';
         document.body.appendChild(tag);
       }
-      window.onYouTubeIframeAPIReady = create;
+      // Usa callback chain para não sobrescrever
+      const prevCallback = window.onYouTubeIframeAPIReady;
+      window.onYouTubeIframeAPIReady = () => {
+        if (prevCallback) try { prevCallback(); } catch {}
+        create();
+      };
     }
 
     return () => {
@@ -196,7 +179,7 @@ export default function YoutubePlayer({ videoId, playlist = [] }) {
     return () => window.removeEventListener('tv:ytVolume', handleVolume);
   }, []);
 
-  // Interação do usuário para iniciar reprodução
+  // Interação do usuário para iniciar reprodução (autoplay policy)
   useEffect(() => {
     function handleInteraction() {
       if (!playerRef.current || !readyRef.current) return;
@@ -244,22 +227,11 @@ export default function YoutubePlayer({ videoId, playlist = [] }) {
         />
       </div>
       
-      {/* CSS para reduzir frame rate e otimizar GPU */}
+      {/* ✅ FIX: CSS limpo — removidos hacks prejudiciais */}
       <style jsx global>{`
-        /* Container do player com otimizações de GPU */
         .yt-wrapper {
-          /* Força composição em GPU separada */
+          /* GPU compositing simples */
           transform: translateZ(0);
-          will-change: transform;
-          
-          /* REDUZ FRAME RATE - renderiza menos frames */
-          /* Isso faz o navegador pular frames, reduzindo carga */
-          animation: reduceFrameRate 0.066s steps(1) infinite;
-        }
-        
-        @keyframes reduceFrameRate {
-          0%, 100% { opacity: 0.9999; }
-          50% { opacity: 1; }
         }
         
         /* Iframe do YouTube */
@@ -267,23 +239,7 @@ export default function YoutubePlayer({ videoId, playlist = [] }) {
           width: 100% !important;
           height: 100% !important;
           border: 0 !important;
-          
-          /* Otimizações de renderização */
           transform: translateZ(0);
-          backface-visibility: hidden;
-          perspective: 1000px;
-          
-          /* Desabilita anti-aliasing pesado */
-          image-rendering: optimizeSpeed;
-          
-          /* Reduz qualidade de renderização para economizar GPU */
-          filter: contrast(1.001);
-        }
-        
-        /* Remove animações desnecessárias do iframe */
-        #yt-player iframe * {
-          animation-duration: 0.001s !important;
-          transition-duration: 0.001s !important;
         }
       `}</style>
     </div>
