@@ -196,6 +196,41 @@ export default function YoutubePlayer({ videoId, playlist = [] }) {
     return () => window.removeEventListener('tv:ytVolume', handleVolume);
   }, []);
 
+  // Watchdog: detecta travamentos silenciosos do YouTube
+  useEffect(() => {
+    let lastTime = -1;
+    let stuckCount = 0;
+
+    const id = setInterval(() => {
+      if (!playerRef.current || !readyRef.current || !mountedRef.current) return;
+      try {
+        const state = playerRef.current.getPlayerState?.();
+        if (state !== window.YT?.PlayerState?.PLAYING) return;
+
+        const cur = playerRef.current.getCurrentTime?.() || 0;
+        if (lastTime >= 0 && Math.abs(cur - lastTime) < 0.5) {
+          stuckCount++;
+          if (stuckCount >= 2) {
+            console.log('[YT] Watchdog: vídeo travado, recuperando...');
+            stuckCount = 0;
+            const vid = playlistRef.current?.[0] || videoId;
+            if (vid) {
+              playerRef.current.loadVideoById(vid);
+            } else {
+              playerRef.current.seekTo(0, true);
+              playerRef.current.playVideo();
+            }
+          }
+        } else {
+          stuckCount = 0;
+        }
+        lastTime = cur;
+      } catch {}
+    }, 30000);
+
+    return () => clearInterval(id);
+  }, [videoId]);
+
   // Interação do usuário para iniciar reprodução
   useEffect(() => {
     function handleInteraction() {
@@ -244,46 +279,19 @@ export default function YoutubePlayer({ videoId, playlist = [] }) {
         />
       </div>
       
-      {/* CSS para reduzir frame rate e otimizar GPU */}
+      {/* CSS otimizado para GPU — sem hacks de frame rate */}
       <style jsx global>{`
-        /* Container do player com otimizações de GPU */
         .yt-wrapper {
-          /* Força composição em GPU separada */
           transform: translateZ(0);
           will-change: transform;
-          
-          /* REDUZ FRAME RATE - renderiza menos frames */
-          /* Isso faz o navegador pular frames, reduzindo carga */
-          animation: reduceFrameRate 0.066s steps(1) infinite;
         }
-        
-        @keyframes reduceFrameRate {
-          0%, 100% { opacity: 0.9999; }
-          50% { opacity: 1; }
-        }
-        
-        /* Iframe do YouTube */
+
         #yt-player iframe {
           width: 100% !important;
           height: 100% !important;
           border: 0 !important;
-          
-          /* Otimizações de renderização */
           transform: translateZ(0);
           backface-visibility: hidden;
-          perspective: 1000px;
-          
-          /* Desabilita anti-aliasing pesado */
-          image-rendering: optimizeSpeed;
-          
-          /* Reduz qualidade de renderização para economizar GPU */
-          filter: contrast(1.001);
-        }
-        
-        /* Remove animações desnecessárias do iframe */
-        #yt-player iframe * {
-          animation-duration: 0.001s !important;
-          transition-duration: 0.001s !important;
         }
       `}</style>
     </div>
