@@ -143,6 +143,25 @@ function DirArrow({ side, big }) {
   );
 }
 
+// Pictograma de pedestre (estilo sinalização) caminhando para o lado do consultório.
+// O desenho anda para a direita; para a esquerda é espelhado.
+function Walker({ side, className }) {
+  return (
+    <span className={`${s.walker} ${side === 'left' ? s.walkerLeft : ''} ${className || ''}`} aria-hidden>
+      <svg viewBox="0 0 40 80" className={s.walkerSvg}>
+        <g className={s.walkerBody}>
+          <line className={`${s.limb} ${s.armBack}`} x1="20" y1="22" x2="20" y2="40" />
+          <line className={`${s.limb} ${s.legBack}`} x1="20" y1="46" x2="20" y2="74" />
+          <line className={s.torso} x1="20" y1="20" x2="20" y2="46" />
+          <line className={`${s.limb} ${s.legFront}`} x1="20" y1="46" x2="20" y2="74" />
+          <line className={`${s.limb} ${s.armFront}`} x1="20" y1="22" x2="20" y2="40" />
+          <circle className={s.head} cx="21" cy="9" r="7" />
+        </g>
+      </svg>
+    </span>
+  );
+}
+
 // Uma metade da tela: Consultório 1 (esquerda) ou Consultórios 2 e 3 (direita)
 function Lane({ side, calls }) {
   const label = side === 'left' ? 'Consultório 1' : 'Consultórios 2 e 3';
@@ -164,9 +183,11 @@ function Lane({ side, calls }) {
                 <Words text={p.nome} baseDelay={120 + i * 180} />
               </div>
               <div className={s.roomLine}>
+                {side === 'left' && <Walker side="left" />}
                 {side === 'left' && <DirArrow side="left" />}
                 <span className={s.roomPillLg}>Consultório <strong>{p.sala}</strong></span>
                 {side === 'right' && <DirArrow side="right" />}
+                {side === 'right' && <Walker side="right" />}
               </div>
             </div>
           ))}
@@ -185,6 +206,7 @@ function CallOverlay({ call, leaving }) {
     <div className={`${s.overlay} ${sideCls} ${leaving ? s.overlayOut : ''}`}>
       <div className={s.overlaySweep} aria-hidden />
       <div className={s.overlayEdge} aria-hidden />
+
       <div className={s.overlayInner}>
         <img className={s.overlayMark} src="/logo-simbolo-cores.png" alt="" />
         <div className={s.overlayEyebrow}>Paciente</div>
@@ -198,6 +220,10 @@ function CallOverlay({ call, leaving }) {
         </div>
         <div className={s.overlayDirection}>
           <DirArrow side={side} big />
+          <div className={s.overlayPath} aria-hidden>
+            <span className={s.overlayFloor} />
+            <Walker side="right" className={s.walkerStroll} />
+          </div>
         </div>
       </div>
     </div>

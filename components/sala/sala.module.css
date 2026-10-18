@@ -374,8 +374,8 @@
   display: inline-grid;
   place-items: center;
   flex-shrink: 0;
-  width: 7.4vh;
-  height: 7.4vh;
+  width: 9.6vh;
+  height: 9.6vh;
   border-radius: 50%;
   background: radial-gradient(circle at 35% 30%, #7cc6f0, var(--sky) 55%, #3f9fd8);
   box-shadow: 0 1vh 2.6vh rgba(96, 184, 236, 0.35);
@@ -422,7 +422,7 @@
   100% { transform: translate3d(120%, 0, 0); }
 }
 
-.dirBig { width: 15vh; height: 15vh; box-shadow: 0 2vh 5vh rgba(96, 184, 236, 0.4); }
+.dirBig { width: 19vh; height: 19vh; box-shadow: 0 2vh 5vh rgba(96, 184, 236, 0.4); }
 .dirBig::after { border-width: 3px; }
 
 /* ===== Últimas chamadas, separadas por lado (sem horário) ===== */
@@ -627,7 +627,7 @@
 }
 
 .overlayMark {
-  height: 10vh;
+  height: 8vh;
   width: auto;
   animation: markIn 1.2s 0.1s cubic-bezier(.2, .8, .2, 1) both;
 }
@@ -683,7 +683,8 @@
 }
 
 .overlayDirection {
-  margin-top: 3.6vh;
+  position: relative;
+  margin-top: 3vh;
   display: flex;
   justify-content: center;
 }
@@ -693,6 +694,100 @@
 
 @keyframes slideFromLeft { from { opacity: 0; transform: translate3d(-4vw, 0, 0); } to { opacity: 1; transform: none; } }
 @keyframes slideFromRight { from { opacity: 0; transform: translate3d(4vw, 0, 0); } to { opacity: 1; transform: none; } }
+
+/* ===== Pictograma de pedestre caminhando ===== */
+.walker {
+  display: inline-block;
+  flex-shrink: 0;
+  height: 10vh;
+  aspect-ratio: 1 / 2;
+}
+
+.walkerLeft { transform: scaleX(-1); }
+
+.walkerSvg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.walkerBody {
+  transform-box: view-box;
+  transform-origin: 20px 74px;
+  transform: rotate(6deg);
+  animation: walkBob 0.5s ease-in-out infinite alternate;
+}
+
+.torso, .limb {
+  stroke: var(--royal);
+  stroke-width: 6.5;
+  stroke-linecap: round;
+}
+
+.head { fill: var(--royal); }
+
+.limb {
+  transform-box: view-box;
+  animation-duration: 1s;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+  animation-direction: alternate;
+}
+
+/* Membros de trás um pouco mais claros, para dar profundidade */
+.armBack, .legBack { stroke: var(--sky); }
+
+.legFront, .legBack { transform-origin: 20px 46px; }
+.armFront, .armBack { transform-origin: 20px 22px; }
+
+.legFront { animation-name: swingA; }
+.legBack { animation-name: swingB; }
+.armFront { animation-name: swingB; }
+.armBack { animation-name: swingA; }
+
+@keyframes swingA { from { transform: rotate(-28deg); } to { transform: rotate(28deg); } }
+@keyframes swingB { from { transform: rotate(28deg); } to { transform: rotate(-28deg); } }
+@keyframes walkBob { from { transform: rotate(6deg) translate3d(0, 0, 0); } to { transform: rotate(6deg) translate3d(0, -1.5px, 0); } }
+
+/* Caminho na chamada em tela cheia: o pedestre sai da seta e caminha até a borda do lado do consultório */
+.overlayPath {
+  position: absolute;
+  left: calc(50% + 11vh);
+  bottom: 0;
+  width: 36vw;
+  height: 15vh;
+  pointer-events: none;
+}
+
+.overlayLeft .overlayPath { left: auto; right: calc(50% + 11vh); transform: scaleX(-1); }
+
+.overlayFloor {
+  position: absolute;
+  left: 0;
+  right: 4vw;
+  bottom: 0;
+  height: 0.5vh;
+  border-radius: 1vh;
+  background: linear-gradient(90deg, rgba(48, 82, 172, 0.05), rgba(48, 82, 172, 0.35) 60%, rgba(96, 184, 236, 0.8));
+  transform-origin: left;
+  animation: ruleIn 1.2s 1.6s cubic-bezier(.2, .8, .2, 1) both;
+}
+
+.walkerStroll {
+  position: absolute;
+  left: 0;
+  bottom: 0.4vh;
+  height: 14vh;
+  animation: stroll 5s 1.8s linear infinite both;
+}
+
+@keyframes stroll {
+  0% { transform: translate3d(0, 0, 0); opacity: 0; }
+  8% { opacity: 1; }
+  82% { opacity: 1; }
+  100% { transform: translate3d(30vw, 0, 0); opacity: 0; }
+}
 
 /* ===== Animações compartilhadas ===== */
 @keyframes fadeUp { from { opacity: 0; transform: translate3d(0, 2vh, 0); } to { opacity: 1; transform: none; } }
