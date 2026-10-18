@@ -1,6 +1,6 @@
 // pages/tv.js — Sala de espera premium (TV Samsung 85" 4K via Fire TV + app OftalmoCenterTV)
 // O layout antigo continua disponível em /tv-classico.
-// A voz da chamada é a mesma de antes: fila de áudio abaixo + /tv-ducking.js (sem alterações).
+// A voz da chamada é a mesma de antes (fila de áudio abaixo + /tv-ducking.js); o Admin pode cortá-la com INTERROMPER AGORA.
 // Para testar sem chamar ninguém de verdade: /tv?demo=1 (simula chamadas só nesta tela).
 
 import Head from 'next/head';
@@ -35,15 +35,16 @@ const DEMO_NAMES = [
   ['João Pedro Martins', '1'], ['Luísa Andrade', '2'], ['Roberto Nogueira', '3'],
 ];
 
-/* ===== Fila de áudio — idêntica à do layout anterior ===== */
-function enqueueAudio(audioQueueRef, playingRef, nome, sala) {
+/* ===== Fila de áudio — igual à do layout anterior, mais o "geração" para o INTERROMPER ===== */
+function enqueueAudio(audioQueueRef, playingRef, nome, sala, genRef) {
   if (!nome) return;
   audioQueueRef.current.push({ nome, sala });
-  playQueue(audioQueueRef, playingRef);
+  playQueue(audioQueueRef, playingRef, genRef);
 }
 
-function playQueue(audioQueueRef, playingRef) {
+function playQueue(audioQueueRef, playingRef, genRef) {
   if (playingRef.current) return;
+  const myGen = genRef ? genRef.current : 0;
   const next = audioQueueRef.current.shift();
   if (!next) return;
   playingRef.current = true;
@@ -55,7 +56,13 @@ function playQueue(audioQueueRef, playingRef) {
   function advance() {
     if (resolved) return;
     resolved = true;
-    setTimeout(() => { playingRef.current = false; playQueue(audioQueueRef, playingRef); }, 500);
+    // Depois de um INTERROMPER, avisos atrasados da fala antiga são ignorados
+    if (genRef && genRef.current !== myGen) return;
+    setTimeout(() => {
+      if (genRef && genRef.current !== myGen) return;
+      playingRef.current = false;
+      playQueue(audioQueueRef, playingRef, genRef);
+    }, 500);
   }
 
   const prevDone = window.tvTTSDone;
@@ -252,13 +259,12 @@ function RecentSide({ side, items }) {
   );
 }
 
+// Só a animação discreta de "música tocando" (sem texto)
 function NowPlaying({ title }) {
   if (title === null) return <div className={s.nowPlaying} />;
   return (
     <div className={s.nowPlaying}>
       <span className={s.eq} aria-hidden><i /><i /><i /><i /></span>
-      <span className={s.npLabel}>Música ambiente</span>
-      {title ? <span className={s.npTitle}>{title}</span> : null}
     </div>
   );
 }
@@ -281,6 +287,10 @@ export default function TV() {
   const playingRef = useRef(false);
   const overlayQueueRef = useRef([]);
   const overlayBusyRef = useRef(false);
+  const overlayTimersRef = useRef([]);
+  const audioGenRef = useRef(0);
+  const initInterruptRef = useRef(false);
+  const lastInterruptRef = useRef('');
 
   useEffect(() => {
     try {
@@ -315,21 +325,68 @@ export default function TV() {
     setOverlayLeaving(false);
     setOverlay(next);
     const total = overlayQueueRef.current.length ? OVERLAY_MS_QUEUED : OVERLAY_MS;
-    setTimeout(() => setOverlayLeaving(true), total - OVERLAY_EXIT_MS);
-    setTimeout(() => {
-      setOverlay(null);
-      setOverlayLeaving(false);
-      overlayBusyRef.current = false;
-      showNextOverlay();
-    }, total);
+    overlayTimersRef.current = [
+      setTimeout(() => setOverlayLeaving(true), total - OVERLAY_EXIT_MS),
+      setTimeout(() => {
+        setOverlay(null);
+        setOverlayLeaving(false);
+        overlayBusyRef.current = false;
+        showNextOverlay();
+      }, total),
+    ];
   }
 
   function announce(nome, sala) {
     if (!nome) return;
-    enqueueAudio(audioQueueRef, playingRef, nome, sala);
+    enqueueAudio(audioQueueRef, playingRef, nome, sala, audioGenRef);
     overlayQueueRef.current.push({ key: `${Date.now()}-${Math.random()}`, nome, sala });
     showNextOverlay();
   }
+
+  // ---- INTERROMPER AGORA: some da tela e a voz é cortada na hora ----
+  function interruptNow() {
+    audioGenRef.current += 1;
+    audioQueueRef.current = [];
+    playingRef.current = false;
+    try { if (typeof window.tvStopAnnounce === 'function') window.tvStopAnnounce(); } catch {}
+    overlayTimersRef.current.forEach(clearTimeout);
+    overlayTimersRef.current = [];
+    overlayQueueRef.current = [];
+    overlayBusyRef.current = false;
+    setOverlayLeaving(false);
+    setOverlay(null);
+  }
+
+  useEffect(() => {
+    if (demo) return undefined;
+    const unsub = onSnapshot(doc(db, 'config', 'interrupt'), (snap) => {
+      const nonce = snap.exists() ? String(snap.data().nonce || '') : '';
+      if (!initInterruptRef.current) {
+        initInterruptRef.current = true;
+        lastInterruptRef.current = nonce;
+        return;
+      }
+      if (nonce && nonce !== lastInterruptRef.current) {
+        lastInterruptRef.current = nonce;
+        interruptNow();
+      }
+    });
+    return () => unsub();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [demo]);
+
+  // No modo demonstração, a tecla X simula o INTERROMPER AGORA
+  useEffect(() => {
+    if (!demo) return undefined;
+    const onKey = (e) => {
+      if (String(e.key).toLowerCase() !== 'x') return;
+      interruptNow();
+      setHistory(h => h.slice(1));
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [demo]);
 
   // ---- Histórico de chamadas ----
   useEffect(() => {
@@ -498,8 +555,8 @@ export default function TV() {
 
       <AmbientPlayer onTrackChange={setTrackTitle} demoTracks={demoTracks} />
 
-      {/* Script de voz (inalterado) */}
-      <Script src="/tv-ducking.js" strategy="afterInteractive" />
+      {/* Script de voz (o ?v= força a TV a baixar a versão nova) */}
+      <Script src="/tv-ducking.js?v=2" strategy="afterInteractive" />
     </div>
   );
 }

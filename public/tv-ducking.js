@@ -149,26 +149,55 @@
     } catch { return false; }
   }
 
+  // Cada anúncio ganha um número; o INTERROMPER invalida o anúncio em andamento
+  var _announceId = 0;
+  var _leadTimer = null;
+
   window.tvAnnounce = function(name, sala){
     if (!name) return;
     var cfg = getCfg();
     var lead = cfg.lead;
+    var myId = ++_announceId;
+    var beepIfCurrent = function(){ if (myId === _announceId) beep(); };
     duckStart();
-    setTimeout(function() {
+    _leadTimer = setTimeout(function() {
+      _leadTimer = null;
+      if (myId !== _announceId) return;
       var text = fmt(name, sala);
       if (cfg.mode === 'fully') {
         if (!fullyTTS(text)) beep();
       } else if (cfg.mode === 'web') {
-        webTTS(text, function(){ beep(); });
+        webTTS(text, beepIfCurrent);
       } else if (cfg.mode === 'beep') {
         beep();
       } else {
         // auto: Android nativo → Fully → Web TTS → Beep
         if (!androidTTS(text) && !fullyTTS(text)) {
-          webTTS(text, function(){ beep(); });
+          webTTS(text, beepIfCurrent);
         }
       }
     }, Math.max(0, Number(lead) || 0));
+  };
+
+  // INTERROMPER AGORA: corta a fala em andamento e devolve o volume da música
+  window.tvStopAnnounce = function(){
+    _announceId++;
+    if (_leadTimer) { clearTimeout(_leadTimer); _leadTimer = null; }
+    try { if ('speechSynthesis' in window) window.speechSynthesis.cancel(); } catch {}
+    try {
+      if (typeof window.AndroidTTS !== 'undefined') {
+        if (typeof window.AndroidTTS.stop === 'function') {
+          window.AndroidTTS.stop();
+        } else if (typeof window.AndroidTTS.speak === 'function') {
+          // O app atual só tem speak() com QUEUE_FLUSH: falar um caractere invisível
+          // substitui (e assim interrompe) a frase que estava sendo dita
+          window.AndroidTTS.speak('​');
+        }
+      }
+    } catch {}
+    try { if (typeof fully !== 'undefined' && typeof fully.stopTextToSpeech === 'function') fully.stopTextToSpeech(); } catch {}
+    if (_ttsDoneResolve) { var r = _ttsDoneResolve; _ttsDoneResolve = null; r(); }
+    else duckEnd();
   };
 
   // === Indicador de conectividade (chamado pelo APK via evaluateJavascript) ===

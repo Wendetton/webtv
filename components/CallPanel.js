@@ -13,12 +13,28 @@ import {
   deleteDoc,
   doc,
   setDoc,
+  writeBatch,
 } from "firebase/firestore";
 
 const ROOMS = ["1", "2", "3"];
 
 /* ========== ESTILOS ========== */
 const styles = {
+  btnInterrupt: {
+    width: "100%",
+    marginTop: 14,
+    padding: "16px 20px",
+    background: "#ef4444",
+    border: "none",
+    borderRadius: 14,
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: 900,
+    letterSpacing: "0.06em",
+    fontFamily: "inherit",
+    cursor: "pointer",
+    transition: "all .15s ease",
+  },
   card: {
     background: "#111827",
     border: "1px solid rgba(255,255,255,0.08)",
@@ -234,6 +250,7 @@ export default function CallPanel() {
   const [tvLastCallAt, setTvLastCallAt] = useState(null);
   const [tvAutoIdle, setTvAutoIdle] = useState(false);
   const [tvIdleSeconds, setTvIdleSeconds] = useState(120);
+  const [interrupting, setInterrupting] = useState(false);
 
   // Restaura ultimo consultorio
   useEffect(() => {
@@ -399,17 +416,45 @@ export default function CallPanel() {
     }
   }
 
-  // Limpar historico
+  // Limpar historico — apaga TODAS as chamadas, em lotes (antes só apagava as 200 mais recentes)
   async function handleClearHistory() {
     if (!confirm("Limpar TODO o histórico de chamadas? Isso não pode ser desfeito.")) return;
     try {
-      const q = query(collection(db, "calls"), orderBy("timestamp", "desc"), limit(200));
-      const snaps = await getDocs(q);
-      await Promise.all(snaps.docs.map(d => deleteDoc(doc(db, "calls", d.id))));
+      let total = 0;
+      for (let rodada = 0; rodada < 100; rodada++) {
+        const snaps = await getDocs(query(collection(db, "calls"), limit(400)));
+        if (snaps.empty) break;
+        const batch = writeBatch(db);
+        snaps.docs.forEach(d => batch.delete(d.ref));
+        await batch.commit();
+        total += snaps.size;
+      }
       await fireAnnounce("", "", true);
-      alert("Histórico limpo com sucesso.");
+      alert(`Histórico limpo com sucesso (${total} chamada${total === 1 ? "" : "s"} apagada${total === 1 ? "" : "s"}).`);
     } catch (e) {
       alert("Não foi possível limpar (verifique permissões).");
+    }
+  }
+
+  // INTERROMPER AGORA — tira a chamada da TV e corta a voz na hora (chamada feita por engano)
+  async function handleInterrupt() {
+    setInterrupting(true);
+    try {
+      // 1) Avisa a TV primeiro (é o que corta a voz e tira o destaque da tela)
+      await setDoc(doc(db, "config", "interrupt"), {
+        nonce: Date.now() + "-" + Math.random().toString(36).slice(2),
+        at: serverTimestamp(),
+      });
+      // 2) Remove do histórico a última chamada, se for recente
+      const snap = await getDocs(query(collection(db, "calls"), orderBy("timestamp", "desc"), limit(1)));
+      const last = snap.docs[0];
+      const t = last && last.data().timestamp;
+      const ms = t && typeof t.toMillis === "function" ? t.toMillis() : null;
+      if (last && ms && Date.now() - ms < 5 * 60 * 1000) await deleteDoc(last.ref);
+    } catch (e) {
+      alert("Não foi possível interromper. Verifique a internet.");
+    } finally {
+      setInterrupting(false);
     }
   }
 
@@ -437,6 +482,10 @@ export default function CallPanel() {
         }
         .btn-recall:hover {
           background: rgba(245, 158, 11, 0.2) !important;
+        }
+        .btn-interrupt:hover:not(:disabled) {
+          background: #dc2626 !important;
+          box-shadow: 0 8px 30px rgba(239, 68, 68, 0.45);
         }
         .btn-clear:hover {
           background: rgba(239, 68, 68, 0.2) !important;
@@ -500,6 +549,17 @@ export default function CallPanel() {
               {busy ? "Chamando..." : "Chamar Paciente"}
             </button>
           </div>
+
+          {/* Interromper chamada feita por engano */}
+          <button
+            onClick={handleInterrupt}
+            disabled={interrupting}
+            style={styles.btnInterrupt}
+            className="btn-interrupt"
+            title="Tira a chamada da TV, corta a voz e remove do histórico a última chamada"
+          >
+            {interrupting ? "Interrompendo..." : "⛔ INTERROMPER AGORA"}
+          </button>
 
           {/* Status na TV */}
           <div style={styles.tvPreview}>
