@@ -9,7 +9,6 @@ import { useEffect, useRef, useState } from 'react';
 import { db } from '../utils/firebase';
 import { collection, query, orderBy, limit, onSnapshot, doc } from 'firebase/firestore';
 import AmbientPlayer from '../components/sala/AmbientPlayer';
-import PosterCarousel from '../components/sala/PosterCarousel';
 import s from '../components/sala/sala.module.css';
 
 const FONTS_URL = 'https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400;1,500&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap';
@@ -20,7 +19,7 @@ const OVERLAY_MS = 9500;
 const OVERLAY_MS_QUEUED = 7500;
 const OVERLAY_EXIT_MS = 1400;
 const PHRASE_MS = 14000;
-const RECENT_COUNT = 4;
+const RECENT_PER_SIDE = 2;
 
 const PHRASES = [
   'Fique à vontade. Em instantes você será chamado.',
@@ -126,44 +125,59 @@ function Welcome() {
   );
 }
 
-function NowCalling({ group }) {
-  if (group.length > 1) {
-    return (
-      <div className={s.calling}>
-        <div className={s.eyebrow}><span className={s.liveDot} />Chamando agora</div>
-        <div className={s.dual}>
-          {group.map((p, i) => (
-            <div key={p.id || i} className={s.dualRow} style={{ animationDelay: `${i * 160}ms` }}>
-              <div className={s.dualName} style={{ fontSize: `${nameSize(p.nome, 7.4)}vh` }}>{p.nome}</div>
-              <div className={s.roomPill}>Consultório <strong>{p.sala}</strong></div>
+// De que lado o paciente deve ir, do ponto de vista de quem olha a TV
+const ROOM_SIDE = { '1': 'left', '2': 'right', '3': 'right' };
+function sideOf(sala) { return ROOM_SIDE[String(sala || '').trim()] || 'right'; }
+
+function Chevrons({ side, big }) {
+  return (
+    <span className={`${s.chevrons} ${side === 'left' ? s.chevronsLeft : s.chevronsRight} ${big ? s.chevronsBig : ''}`} aria-hidden>
+      <i /><i /><i />
+    </span>
+  );
+}
+
+// Uma metade da tela: Consultório 1 (esquerda) ou Consultórios 2 e 3 (direita)
+function Lane({ side, calls }) {
+  const label = side === 'left' ? 'Consultório 1' : 'Consultórios 2 e 3';
+  const sideCls = side === 'left' ? s.laneLeft : s.laneRight;
+  const base = calls.length > 1 ? 7.2 : 10.5;
+  return (
+    <div className={`${s.lane} ${sideCls} ${calls.length ? s.laneActive : ''}`}>
+      <div className={s.laneHead}>
+        {side === 'left' && <span className={s.laneArrow}>←</span>}
+        {label}
+        {side === 'right' && <span className={s.laneArrow}>→</span>}
+      </div>
+      {calls.length ? (
+        <div className={s.laneCalls}>
+          {calls.map((p, i) => (
+            <div key={p.id || i} className={s.laneCall} style={{ animationDelay: `${i * 180}ms` }}>
+              <div className={s.eyebrow}><span className={s.liveDot} />Chamando agora</div>
+              <div className={s.callName} style={{ fontSize: `${nameSize(p.nome, base)}vh` }}>
+                <Words text={p.nome} baseDelay={120 + i * 180} />
+              </div>
+              <div className={s.roomLine}>
+                {side === 'left' && <Chevrons side="left" />}
+                <span className={s.roomPillLg}>Consultório <strong>{p.sala}</strong></span>
+                {side === 'right' && <Chevrons side="right" />}
+              </div>
             </div>
           ))}
         </div>
-      </div>
-    );
-  }
-  const p = group[0];
-  return (
-    <div className={s.calling}>
-      <div className={s.eyebrow}><span className={s.liveDot} />Chamando agora</div>
-      <div className={s.callName} style={{ fontSize: `${nameSize(p.nome, 12.5)}vh` }}>
-        <Words text={p.nome} baseDelay={120} />
-      </div>
-      <div className={s.rule} />
-      <div className={s.roomLine}>
-        <span className={s.roomLabel}>Dirija-se ao</span>
-        <span className={s.roomPillLg}>Consultório <strong>{p.sala}</strong></span>
-      </div>
+      ) : (
+        <div className={s.laneIdle}>Em instantes você será chamado.</div>
+      )}
     </div>
   );
 }
 
 function CallOverlay({ call, leaving }) {
+  const side = sideOf(call.sala);
+  const sideCls = side === 'left' ? s.overlayLeft : s.overlayRight;
   return (
-    <div className={`${s.overlay} ${leaving ? s.overlayOut : ''}`}>
-      <div className={s.overlayRings} aria-hidden>
-        <span /><span /><span /><span />
-      </div>
+    <div className={`${s.overlay} ${sideCls} ${leaving ? s.overlayOut : ''}`}>
+      <div className={s.overlaySweep} aria-hidden />
       <div className={s.overlayInner}>
         <img className={s.overlayMark} src="/logo-simbolo-claro.png" alt="" />
         <div className={s.overlayEyebrow}>Paciente</div>
@@ -175,7 +189,37 @@ function CallOverlay({ call, leaving }) {
           <span>Dirija-se ao</span>
           <strong>Consultório {call.sala}</strong>
         </div>
+        <div className={s.overlayDirection}>
+          {side === 'left' && <Chevrons side="left" big />}
+          <span>{side === 'left' ? 'à sua esquerda' : 'à sua direita'}</span>
+          {side === 'right' && <Chevrons side="right" big />}
+        </div>
       </div>
+    </div>
+  );
+}
+
+function RecentSide({ side, items }) {
+  return (
+    <div className={`${s.recentSide} ${side === 'left' ? s.recentLeft : s.recentRight}`}>
+      <div className={s.recentHead}>
+        {side === 'left' ? '← Consultório 1' : 'Consultórios 2 e 3 →'}
+      </div>
+      {items.length ? (
+        <ul className={s.recentList}>
+          {items.map(h => (
+            <li key={h.id} className={s.recentItem}>
+              <span className={s.recentName}>{h.nome}</span>
+              <span className={s.recentMeta}>
+                {side === 'right' ? `Consultório ${h.sala}` : ''}
+                <em>{hhmm(tsMs(h))}</em>
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <div className={s.recentEmpty}>—</div>
+      )}
     </div>
   );
 }
@@ -352,8 +396,12 @@ export default function TV() {
     }
   }
   const currentIds = new Set(currentGroup.map(x => x.id));
-  const recentItems = forcedIdle ? [] : history.filter(h => !currentIds.has(h.id)).slice(0, RECENT_COUNT);
-  const stageKey = isIdle ? 'idle' : currentGroup.map(x => x.id).join('|');
+  const leftCalls = currentGroup.filter(x => sideOf(x.sala) === 'left');
+  const rightCalls = currentGroup.filter(x => sideOf(x.sala) === 'right');
+  const past = forcedIdle ? [] : history.filter(h => !currentIds.has(h.id));
+  const recentLeft = past.filter(h => sideOf(h.sala) === 'left').slice(0, RECENT_PER_SIDE);
+  const recentRight = past.filter(h => sideOf(h.sala) === 'right').slice(0, RECENT_PER_SIDE);
+  const laneKey = list => list.map(x => x.id).join('|') || 'vazio';
 
   const timeTxt = nowMs ? hhmm(nowMs) : '';
   const dateTxt = nowMs ? new Date(nowMs).toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' }) : '';
@@ -388,37 +436,24 @@ export default function TV() {
       </header>
 
       <main className={s.main}>
-        <section className={s.stage}>
-          <div key={stageKey} className={s.stageInner}>
-            {isIdle ? <Welcome /> : <NowCalling group={currentGroup} />}
-          </div>
-        </section>
-
-        <aside className={s.side}>
-          <div className={s.posterFrame}>
-            <PosterCarousel />
-          </div>
-
-          <div className={s.recent}>
-            <div className={s.recentHead}>Últimas chamadas</div>
-            {recentItems.length ? (
-              <ul className={s.recentList}>
-                {recentItems.map(h => (
-                  <li key={h.id} className={s.recentItem}>
-                    <span className={s.recentName}>{h.nome}</span>
-                    <span className={s.recentMeta}>
-                      Consultório {h.sala}
-                      <em>{hhmm(tsMs(h))}</em>
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <div className={s.recentEmpty}>As chamadas aparecerão aqui.</div>
-            )}
-          </div>
-        </aside>
+        {isIdle ? (
+          <section key="idle" className={s.stage}>
+            <Welcome />
+          </section>
+        ) : (
+          <section className={s.lanes}>
+            <Lane key={`l-${laneKey(leftCalls)}`} side="left" calls={leftCalls} />
+            <div className={s.laneDivider} aria-hidden />
+            <Lane key={`r-${laneKey(rightCalls)}`} side="right" calls={rightCalls} />
+          </section>
+        )}
       </main>
+
+      <section className={s.recent}>
+        <RecentSide side="left" items={recentLeft} />
+        <div className={s.laneDivider} aria-hidden />
+        <RecentSide side="right" items={recentRight} />
+      </section>
 
       <footer className={s.bottom}>
         <NowPlaying title={trackTitle} />
