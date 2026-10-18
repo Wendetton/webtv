@@ -1,4 +1,4 @@
-// pages/admin.js - Layout Redesenhado (apenas YouTube)
+// pages/admin.js - Painel de chamadas + música ambiente da sala de espera
 import { useEffect, useState, useRef } from "react";
 import { db } from "../utils/firebase";
 import {
@@ -7,7 +7,7 @@ import {
 } from "firebase/firestore";
 import CallPanel from "../components/CallPanel";
 import CarouselManager from '../components/CarouselManager';
-import YoutubePlaylistManager from '../components/YoutubePlaylistManager';
+import MusicManager from '../components/MusicManager';
 import AnnounceSettings from "../components/AnnounceSettings";
 
 /* ========== ESTILOS ========== */
@@ -177,9 +177,10 @@ const styles = {
   },
 };
 
-/* ========== COMPONENTE: Controle de Volume do YouTube ========== */
-function YTLiveVolume() {
-  const [val, setVal] = useState(60);
+/* ========== COMPONENTE: Volume da música ambiente ========== */
+function MusicVolume() {
+  const [val, setVal] = useState(40);
+  const [shuffle, setShuffle] = useState(false);
   const [saving, setSaving] = useState(false);
   const tRef = useRef(null);
 
@@ -187,25 +188,28 @@ function YTLiveVolume() {
     const ref = doc(db, "config", "control");
     const unsub = onSnapshot(ref, (snap) => {
       const d = snap.exists() ? snap.data() : {};
-      if (Number.isFinite(d.ytVolume)) setVal(d.ytVolume);
+      if (Number.isFinite(d.musicVolume)) setVal(d.musicVolume);
+      setShuffle(Boolean(d.musicShuffle));
     });
     return () => unsub();
   }, []);
 
-  function push(v) {
+  async function save(payload) {
     const ref = doc(db, "config", "control");
+    try {
+      setSaving(true);
+      const snap = await getDoc(ref);
+      const data = { ...payload, updatedAt: Date.now() };
+      if (snap.exists()) await updateDoc(ref, data);
+      else await setDoc(ref, data, { merge: true });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function push(v) {
     window.clearTimeout(tRef.current);
-    tRef.current = window.setTimeout(async () => {
-      try {
-        setSaving(true);
-        const snap = await getDoc(ref);
-        const payload = { ytVolume: v, updatedAt: Date.now() };
-        if (snap.exists()) await updateDoc(ref, payload);
-        else await setDoc(ref, payload, { merge: true });
-      } finally {
-        setSaving(false);
-      }
-    }, 150);
+    tRef.current = window.setTimeout(() => save({ musicVolume: v }), 150);
   }
 
   return (
@@ -225,7 +229,7 @@ function YTLiveVolume() {
         alignItems: "center",
         gap: 8,
       }}>
-        <span>🔊</span> Volume do YouTube
+        <span>🔊</span> Volume da música
       </div>
       <div style={{ padding: "16px 18px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -248,8 +252,17 @@ function YTLiveVolume() {
             {val}%
           </span>
         </div>
+        <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 14, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+          <input
+            type="checkbox"
+            checked={shuffle}
+            onChange={(e) => { setShuffle(e.target.checked); save({ musicShuffle: e.target.checked }); }}
+            style={{ width: 16, height: 16, accentColor: "#3b82f6" }}
+          />
+          Tocar em ordem aleatória
+        </label>
         <p style={{ marginTop: 12, fontSize: 12, color: "#94a3b8", lineHeight: 1.4 }}>
-          Ajuste o volume dos vídeos do YouTube na TV.
+          Volume da música ambiente na TV da sala de espera.
           {saving && <span style={{ marginLeft: 8, color: "#3b82f6" }}>Salvando...</span>}
         </p>
       </div>
@@ -336,8 +349,8 @@ export default function Admin() {
 
         {/* Seção de Mídia (inferior - 3 colunas) */}
         <section style={styles.mediaSection} className="media-section">
-          <YoutubePlaylistManager />
-          <YTLiveVolume />
+          <MusicManager />
+          <MusicVolume />
           <CarouselManager />
         </section>
       </main>
