@@ -1,4 +1,4 @@
-/* ===== Sala de espera premium — TV 85" 4K (16:9) =====
+/* ===== Sala de espera premium — TV 85" 4K (16:9) — tema claro nas cores da logo =====
    Tudo em vh/vw para escalar igual em 1080p (Fire TV) e 4K.
    Referência de leitura: 1vh ≈ 1 cm de altura de letra numa TV de 85".
    Orientação: Consultório 1 fica à ESQUERDA de quem olha a TV; 2 e 3 à DIREITA.
@@ -7,17 +7,14 @@
 .screen {
   --font-serif: 'Cormorant Garamond';
   --font-sans: 'Plus Jakarta Sans';
-  --navy-0: #050b1f;
-  --navy-1: #0a1638;
   --royal: #3052ac;
-  --royal-soft: #4a6fd1;
+  --royal-2: #3f6fd0;
   --sky: #60b8ec;
-  --sky-soft: #9fd6f5;
-  --ivory: #f4f6fb;
-  --muted: rgba(228, 236, 250, 0.62);
-  --faint: rgba(228, 236, 250, 0.38);
-  --line: rgba(160, 200, 255, 0.14);
-  --panel: rgba(255, 255, 255, 0.035);
+  --sky-soft: #cfe8f8;
+  --ink: #14244f;
+  --muted: rgba(20, 36, 79, 0.64);
+  --faint: rgba(20, 36, 79, 0.40);
+  --line: rgba(48, 82, 172, 0.14);
 
   position: fixed;
   inset: 0;
@@ -25,14 +22,14 @@
   display: grid;
   grid-template-rows: 12vh 1fr 17vh 7.5vh;
   padding: 0 4.2vw;
-  background: radial-gradient(120% 90% at 20% 10%, var(--navy-1) 0%, var(--navy-0) 60%, #03071a 100%);
-  color: var(--ivory);
+  background: radial-gradient(120% 100% at 15% 0%, #ffffff 0%, #f4f8fd 45%, #e8f2fb 100%);
+  color: var(--ink);
   font-family: var(--font-sans), system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   cursor: none;
 }
 
-/* ===== Fundo vivo ===== */
+/* ===== Fundo vivo: luzes suaves em azul céu e royal ===== */
 .ambient {
   position: absolute;
   inset: 0;
@@ -47,35 +44,35 @@
 }
 
 .glowA {
-  width: 95vh; height: 95vh;
-  left: -18vh; top: -28vh;
-  background: radial-gradient(circle, rgba(48, 82, 172, 0.55) 0%, rgba(48, 82, 172, 0) 68%);
+  width: 100vh; height: 100vh;
+  right: -24vh; top: -40vh;
+  background: radial-gradient(circle, rgba(96, 184, 236, 0.30) 0%, rgba(96, 184, 236, 0) 68%);
   animation: driftA 46s ease-in-out infinite alternate;
 }
 
 .glowB {
   width: 110vh; height: 110vh;
-  right: -30vh; bottom: -48vh;
-  background: radial-gradient(circle, rgba(96, 184, 236, 0.28) 0%, rgba(96, 184, 236, 0) 66%);
+  left: -30vh; bottom: -55vh;
+  background: radial-gradient(circle, rgba(48, 82, 172, 0.14) 0%, rgba(48, 82, 172, 0) 66%);
   animation: driftB 58s ease-in-out infinite alternate;
 }
 
 .glowC {
   width: 70vh; height: 70vh;
-  left: 34vw; top: 30vh;
-  background: radial-gradient(circle, rgba(74, 111, 209, 0.22) 0%, rgba(74, 111, 209, 0) 70%);
+  left: 36vw; top: 26vh;
+  background: radial-gradient(circle, rgba(96, 184, 236, 0.16) 0%, rgba(96, 184, 236, 0) 70%);
   animation: driftC 38s ease-in-out infinite alternate;
 }
 
 .vignette {
   position: absolute;
   inset: 0;
-  background: radial-gradient(140% 100% at 50% 40%, transparent 55%, rgba(2, 5, 16, 0.65) 100%);
+  background: radial-gradient(140% 110% at 50% 40%, transparent 60%, rgba(48, 82, 172, 0.07) 100%);
 }
 
-@keyframes driftA { from { transform: translate3d(0, 0, 0) scale(1); } to { transform: translate3d(14vw, 10vh, 0) scale(1.18); } }
-@keyframes driftB { from { transform: translate3d(0, 0, 0) scale(1.1); } to { transform: translate3d(-16vw, -12vh, 0) scale(0.92); } }
-@keyframes driftC { from { transform: translate3d(0, 0, 0); opacity: 0.6; } to { transform: translate3d(-10vw, -14vh, 0); opacity: 1; } }
+@keyframes driftA { from { transform: translate3d(0, 0, 0) scale(1); } to { transform: translate3d(-14vw, 10vh, 0) scale(1.15); } }
+@keyframes driftB { from { transform: translate3d(0, 0, 0) scale(1.05); } to { transform: translate3d(16vw, -10vh, 0) scale(0.92); } }
+@keyframes driftC { from { transform: translate3d(0, 0, 0); opacity: 0.6; } to { transform: translate3d(-10vw, -12vh, 0); opacity: 1; } }
 
 .top, .main, .recent, .bottom { position: relative; z-index: 1; }
 
@@ -105,7 +102,7 @@
 
 .date {
   font-size: 2.3vh;
-  font-weight: 400;
+  font-weight: 500;
   color: var(--muted);
   letter-spacing: 0.02em;
 }
@@ -115,6 +112,7 @@
 .time {
   font-size: 5.4vh;
   font-weight: 300;
+  color: var(--royal);
   letter-spacing: 0.02em;
   font-variant-numeric: tabular-nums;
 }
@@ -143,13 +141,13 @@
   align-items: center;
   gap: 1.4vh;
   font-size: 2vh;
-  font-weight: 600;
+  font-weight: 700;
   letter-spacing: 0.34em;
   text-transform: uppercase;
-  color: var(--sky);
+  color: var(--royal);
 }
 
-/* ----- Boas-vindas (sem chamada) ----- */
+/* ----- Tela de espera (sem chamada recente) ----- */
 .welcome {
   position: relative;
   text-align: center;
@@ -160,24 +158,25 @@
   content: '';
   width: 5vh;
   height: 1px;
-  background: linear-gradient(90deg, transparent, var(--sky));
+  background: linear-gradient(90deg, transparent, var(--royal));
 }
 
-.welcome .eyebrow::after { background: linear-gradient(90deg, var(--sky), transparent); }
+.welcome .eyebrow::after { background: linear-gradient(90deg, var(--royal), transparent); }
 
 .welcomeTitle {
   margin: 2.6vh 0 0;
   font-family: var(--font-serif), Georgia, serif;
-  font-weight: 400;
+  font-weight: 500;
   font-size: 14vh;
   line-height: 1;
   letter-spacing: -0.01em;
+  color: var(--royal);
 }
 
 .welcomeTitle em {
   font-style: italic;
-  font-weight: 300;
-  color: var(--sky-soft);
+  font-weight: 400;
+  color: var(--sky);
 }
 
 .phrase {
@@ -214,12 +213,12 @@
   position: absolute;
   inset: 0;
   border-radius: 50%;
-  border: 1px solid rgba(96, 184, 236, 0.18);
+  border: 1px solid rgba(96, 184, 236, 0.35);
   animation: breathe 10s ease-in-out infinite;
 }
 
-.iris span:nth-child(2) { inset: 16%; border-color: rgba(96, 184, 236, 0.13); animation-delay: -1.2s; }
-.iris span:nth-child(3) { inset: 32%; border: none; background: radial-gradient(circle, rgba(96, 184, 236, 0.16), rgba(96, 184, 236, 0) 70%); animation-delay: -2.4s; }
+.iris span:nth-child(2) { inset: 16%; border-color: rgba(48, 82, 172, 0.16); animation-delay: -1.2s; }
+.iris span:nth-child(3) { inset: 32%; border: none; background: radial-gradient(circle, rgba(96, 184, 236, 0.22), rgba(96, 184, 236, 0) 70%); animation-delay: -2.4s; }
 
 @keyframes breathe {
   0%, 100% { transform: scale(0.86); opacity: 0.45; }
@@ -254,14 +253,14 @@
   align-items: center;
   gap: 1.4vh;
   font-size: 2.4vh;
-  font-weight: 600;
+  font-weight: 700;
   letter-spacing: 0.28em;
   text-transform: uppercase;
   color: var(--faint);
   transition: color 0.8s ease;
 }
 
-.laneActive .laneHead { color: var(--sky); }
+.laneActive .laneHead { color: var(--royal); }
 
 .laneArrow {
   font-size: 3.4vh;
@@ -318,7 +317,7 @@
 }
 
 @keyframes livePulse {
-  0% { box-shadow: 0 0 0 0 rgba(96, 184, 236, 0.6); }
+  0% { box-shadow: 0 0 0 0 rgba(96, 184, 236, 0.7); }
   100% { box-shadow: 0 0 0 2.2vh rgba(96, 184, 236, 0); }
 }
 
@@ -327,6 +326,7 @@
   font-weight: 700;
   line-height: 1.05;
   letter-spacing: -0.02em;
+  color: var(--ink);
   text-wrap: balance;
 }
 
@@ -345,7 +345,7 @@
   margin-top: 3.4vh;
   display: flex;
   align-items: center;
-  gap: 2vh;
+  gap: 2.4vh;
   animation: fadeUp 1s 0.6s cubic-bezier(.2, .8, .2, 1) both;
 }
 
@@ -357,51 +357,75 @@
   gap: 0.35em;
   padding: 1.4vh 3.2vh;
   border-radius: 999px;
-  background: linear-gradient(135deg, rgba(48, 82, 172, 0.55), rgba(96, 184, 236, 0.28));
-  border: 1px solid rgba(159, 214, 245, 0.35);
-  color: var(--ivory);
+  background: linear-gradient(135deg, var(--royal), var(--royal-2));
+  box-shadow: 0 1.2vh 3vh rgba(48, 82, 172, 0.22);
+  color: #fff;
   font-size: 4.4vh;
   font-weight: 500;
   white-space: nowrap;
 }
 
-.roomPillLg strong { font-weight: 800; color: #fff; }
+.roomPillLg strong { font-weight: 800; }
 
-/* Setas que "correm" na direção do consultório */
-.chevrons {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.6vh;
+/* ----- Seta de direção: anda continuamente para o lado do consultório -----
+   O desenho aponta para a direita; para a esquerda é espelhado. */
+.dirArrow {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 7.4vh;
+  height: 7.4vh;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #7cc6f0, var(--sky) 55%, #3f9fd8);
+  box-shadow: 0 1vh 2.6vh rgba(96, 184, 236, 0.35);
 }
 
-.chevrons i {
-  display: block;
-  width: 2.6vh;
-  height: 2.6vh;
-  border-top: 0.55vh solid var(--sky);
-  border-right: 0.55vh solid var(--sky);
-  border-radius: 0.3vh;
-  opacity: 0.15;
-  animation: chevronFlow 1.5s ease-in-out infinite;
+.dirLeft { transform: scaleX(-1); }
+
+/* Onda que se afasta no sentido da seta */
+.dirArrow::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid rgba(96, 184, 236, 0.6);
+  animation: dirWave 1.8s cubic-bezier(.2, .6, .3, 1) infinite;
 }
 
-.chevronsRight i { transform: rotate(45deg); }
-.chevronsLeft i { transform: rotate(-135deg); }
-
-/* A sequência acende do centro para a borda */
-.chevronsRight i:nth-child(1), .chevronsLeft i:nth-child(3) { animation-delay: 0s; }
-.chevronsRight i:nth-child(2), .chevronsLeft i:nth-child(2) { animation-delay: 0.2s; }
-.chevronsRight i:nth-child(3), .chevronsLeft i:nth-child(1) { animation-delay: 0.4s; }
-
-@keyframes chevronFlow {
-  0%, 100% { opacity: 0.15; }
-  35% { opacity: 1; }
+@keyframes dirWave {
+  0% { transform: translate3d(0, 0, 0) scale(1); opacity: 0.9; }
+  100% { transform: translate3d(70%, 0, 0) scale(1.35); opacity: 0; }
 }
 
-.chevronsBig { gap: 1.2vh; }
-.chevronsBig i { width: 5vh; height: 5vh; border-width: 1vh; border-radius: 0.5vh; }
+.dirTrack {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+}
 
-/* ===== Últimas chamadas, separadas por lado ===== */
+.dirSvg {
+  width: 62%;
+  height: auto;
+  stroke: #fff;
+  animation: dirGo 1.8s cubic-bezier(.5, 0, .3, 1) infinite;
+}
+
+/* Entra pelo lado oposto, para no centro e sai para o lado do consultório */
+@keyframes dirGo {
+  0% { transform: translate3d(-120%, 0, 0); }
+  35% { transform: translate3d(0, 0, 0); }
+  70% { transform: translate3d(0, 0, 0); }
+  100% { transform: translate3d(120%, 0, 0); }
+}
+
+.dirBig { width: 15vh; height: 15vh; box-shadow: 0 2vh 5vh rgba(96, 184, 236, 0.4); }
+.dirBig::after { border-width: 3px; }
+
+/* ===== Últimas chamadas, separadas por lado (sem horário) ===== */
 .recent {
   display: grid;
   grid-template-columns: 1fr 1px 1fr;
@@ -417,7 +441,7 @@
 
 .recentHead {
   font-size: 1.8vh;
-  font-weight: 600;
+  font-weight: 700;
   letter-spacing: 0.28em;
   text-transform: uppercase;
   color: var(--faint);
@@ -433,7 +457,6 @@
 .recentItem {
   display: flex;
   align-items: baseline;
-  justify-content: space-between;
   gap: 2vh;
   padding: 0.7vh 0;
   animation: fadeUp 0.9s cubic-bezier(.2, .8, .2, 1) both;
@@ -444,7 +467,7 @@
 .recentName {
   font-size: 3vh;
   font-weight: 600;
-  color: rgba(244, 246, 251, 0.86);
+  color: rgba(20, 36, 79, 0.82);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -453,18 +476,8 @@
 
 .recentMeta {
   flex-shrink: 0;
-  display: inline-flex;
-  gap: 1.4vh;
   font-size: 2.1vh;
-  color: var(--muted);
-}
-
-.recentRight .recentMeta { flex-direction: row-reverse; }
-
-.recentMeta em {
-  font-style: normal;
   color: var(--faint);
-  font-variant-numeric: tabular-nums;
 }
 
 .recentEmpty {
@@ -517,7 +530,7 @@
   letter-spacing: 0.24em;
   text-transform: uppercase;
   font-size: 1.7vh;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--muted);
 }
 
@@ -537,6 +550,7 @@
   font-family: var(--font-serif), Georgia, serif;
   font-style: italic;
   font-size: 2.4vh;
+  color: var(--muted);
 }
 
 /* ===== Destaque de chamada (tela cheia) ===== */
@@ -547,7 +561,7 @@
   display: grid;
   place-items: center;
   overflow: hidden;
-  background: radial-gradient(90% 90% at 50% 50%, #102256 0%, #050b1f 72%);
+  background: radial-gradient(90% 90% at 50% 45%, #ffffff 0%, #f1f7fd 55%, #dcecfa 100%);
   animation: overlayIn 0.9s cubic-bezier(.2, .7, .2, 1) both;
 }
 
@@ -556,26 +570,44 @@
   position: absolute;
   top: 0;
   bottom: 0;
-  width: 60vw;
-  left: 20vw;
-  background: linear-gradient(90deg, rgba(96, 184, 236, 0) 0%, rgba(96, 184, 236, 0.16) 50%, rgba(96, 184, 236, 0) 100%);
+  width: 50vw;
+  left: 25vw;
+  background: linear-gradient(90deg, rgba(96, 184, 236, 0) 0%, rgba(96, 184, 236, 0.28) 50%, rgba(96, 184, 236, 0) 100%);
   opacity: 0;
   will-change: transform;
 }
 
-.overlayRight .overlaySweep { animation: sweepRight 2.6s 0.6s cubic-bezier(.4, 0, .2, 1) infinite; }
-.overlayLeft .overlaySweep { animation: sweepLeft 2.6s 0.6s cubic-bezier(.4, 0, .2, 1) infinite; }
+.overlayRight .overlaySweep { animation: sweepRight 2.4s 0.8s cubic-bezier(.4, 0, .2, 1) infinite; }
+.overlayLeft .overlaySweep { animation: sweepLeft 2.4s 0.8s cubic-bezier(.4, 0, .2, 1) infinite; }
 
 @keyframes sweepRight {
   0% { transform: translate3d(-10vw, 0, 0); opacity: 0; }
   25% { opacity: 1; }
-  100% { transform: translate3d(70vw, 0, 0); opacity: 0; }
+  100% { transform: translate3d(75vw, 0, 0); opacity: 0; }
 }
 
 @keyframes sweepLeft {
   0% { transform: translate3d(10vw, 0, 0); opacity: 0; }
   25% { opacity: 1; }
-  100% { transform: translate3d(-70vw, 0, 0); opacity: 0; }
+  100% { transform: translate3d(-75vw, 0, 0); opacity: 0; }
+}
+
+/* Borda da tela que "acende" do lado do consultório */
+.overlayEdge {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 18vw;
+  opacity: 0;
+  animation: edgePulse 2.4s 0.8s ease-in-out infinite;
+}
+
+.overlayRight .overlayEdge { right: 0; background: linear-gradient(270deg, rgba(48, 82, 172, 0.30), rgba(96, 184, 236, 0.10) 55%, rgba(96, 184, 236, 0)); }
+.overlayLeft .overlayEdge { left: 0; background: linear-gradient(90deg, rgba(48, 82, 172, 0.30), rgba(96, 184, 236, 0.10) 55%, rgba(96, 184, 236, 0)); }
+
+@keyframes edgePulse {
+  0%, 100% { opacity: 0.25; }
+  50% { opacity: 1; }
 }
 
 /* Saída: o nome "segue" para o lado do consultório, depois o fundo se dissolve */
@@ -608,10 +640,10 @@
 .overlayEyebrow {
   margin-top: 3vh;
   font-size: 2.6vh;
-  font-weight: 600;
+  font-weight: 700;
   letter-spacing: 0.5em;
   text-transform: uppercase;
-  color: var(--sky);
+  color: var(--royal);
   animation: fadeUp 1s 0.25s cubic-bezier(.2, .8, .2, 1) both;
 }
 
@@ -620,6 +652,7 @@
   font-weight: 700;
   line-height: 1.04;
   letter-spacing: -0.02em;
+  color: var(--ink);
   text-wrap: balance;
 }
 
@@ -627,7 +660,7 @@
   margin: 3.8vh auto 3.2vh;
   width: 26vw;
   height: 2px;
-  background: linear-gradient(90deg, rgba(96, 184, 236, 0), var(--sky), rgba(96, 184, 236, 0));
+  background: linear-gradient(90deg, rgba(48, 82, 172, 0), var(--royal), rgba(96, 184, 236, 0));
   animation: ruleIn 1.4s 0.9s cubic-bezier(.2, .8, .2, 1) both;
 }
 
@@ -646,21 +679,13 @@
 .overlayRoom strong {
   font-size: 7vh;
   font-weight: 700;
-  color: var(--sky-soft);
+  color: var(--royal);
 }
 
 .overlayDirection {
-  margin-top: 3.4vh;
-  display: inline-flex;
-  align-items: center;
-  gap: 2.6vh;
-  padding: 1.6vh 4vh;
-  border-radius: 999px;
-  border: 1px solid rgba(159, 214, 245, 0.3);
-  background: rgba(48, 82, 172, 0.28);
-  font-size: 4.6vh;
-  font-weight: 600;
-  color: var(--ivory);
+  margin-top: 3.6vh;
+  display: flex;
+  justify-content: center;
 }
 
 .overlayRight .overlayDirection { animation: slideFromLeft 1s 1.5s cubic-bezier(.2, .8, .2, 1) both; }

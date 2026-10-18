@@ -1,15 +1,15 @@
 // Service Worker para a página /tv — cache offline
 // Garante que a TV continue funcionando mesmo com internet instável
 
-const CACHE_NAME = 'webtv-v2';
+const CACHE_NAME = 'webtv-v3';
 
 // Assets essenciais para o funcionamento offline
 const PRECACHE_URLS = [
   '/tv',
   '/tv-ducking.js',
   '/logo.png',
-  '/logo-simbolo-claro.png',
-  '/logo-nome-claro.png',
+  '/logo-simbolo-cores.png',
+  '/logo-nome-cores.png',
 ];
 
 // Install: cacheia assets essenciais

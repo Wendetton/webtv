@@ -20,6 +20,7 @@ const OVERLAY_MS_QUEUED = 7500;
 const OVERLAY_EXIT_MS = 1400;
 const PHRASE_MS = 14000;
 const RECENT_PER_SIDE = 2;
+const DEMO_IDLE_S = 20;
 
 const PHRASES = [
   'Fique à vontade. Em instantes você será chamado.',
@@ -129,10 +130,15 @@ function Welcome() {
 const ROOM_SIDE = { '1': 'left', '2': 'right', '3': 'right' };
 function sideOf(sala) { return ROOM_SIDE[String(sala || '').trim()] || 'right'; }
 
-function Chevrons({ side, big }) {
+// Seta em movimento contínuo para o lado do consultório (sem texto, entendimento imediato)
+function DirArrow({ side, big }) {
   return (
-    <span className={`${s.chevrons} ${side === 'left' ? s.chevronsLeft : s.chevronsRight} ${big ? s.chevronsBig : ''}`} aria-hidden>
-      <i /><i /><i />
+    <span className={`${s.dirArrow} ${side === 'left' ? s.dirLeft : s.dirRight} ${big ? s.dirBig : ''}`} aria-hidden>
+      <span className={s.dirTrack}>
+        <svg viewBox="0 0 48 24" className={s.dirSvg}>
+          <path d="M2 12 H40 M30 3 L42 12 L30 21" fill="none" strokeWidth="4.5" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </span>
     </span>
   );
 }
@@ -158,9 +164,9 @@ function Lane({ side, calls }) {
                 <Words text={p.nome} baseDelay={120 + i * 180} />
               </div>
               <div className={s.roomLine}>
-                {side === 'left' && <Chevrons side="left" />}
+                {side === 'left' && <DirArrow side="left" />}
                 <span className={s.roomPillLg}>Consultório <strong>{p.sala}</strong></span>
-                {side === 'right' && <Chevrons side="right" />}
+                {side === 'right' && <DirArrow side="right" />}
               </div>
             </div>
           ))}
@@ -178,8 +184,9 @@ function CallOverlay({ call, leaving }) {
   return (
     <div className={`${s.overlay} ${sideCls} ${leaving ? s.overlayOut : ''}`}>
       <div className={s.overlaySweep} aria-hidden />
+      <div className={s.overlayEdge} aria-hidden />
       <div className={s.overlayInner}>
-        <img className={s.overlayMark} src="/logo-simbolo-claro.png" alt="" />
+        <img className={s.overlayMark} src="/logo-simbolo-cores.png" alt="" />
         <div className={s.overlayEyebrow}>Paciente</div>
         <div className={s.overlayName} style={{ fontSize: `${nameSize(call.nome, 15)}vh` }}>
           <Words text={call.nome} baseDelay={350} step={120} />
@@ -190,9 +197,7 @@ function CallOverlay({ call, leaving }) {
           <strong>Consultório {call.sala}</strong>
         </div>
         <div className={s.overlayDirection}>
-          {side === 'left' && <Chevrons side="left" big />}
-          <span>{side === 'left' ? 'à sua esquerda' : 'à sua direita'}</span>
-          {side === 'right' && <Chevrons side="right" big />}
+          <DirArrow side={side} big />
         </div>
       </div>
     </div>
@@ -210,10 +215,7 @@ function RecentSide({ side, items }) {
           {items.map(h => (
             <li key={h.id} className={s.recentItem}>
               <span className={s.recentName}>{h.nome}</span>
-              <span className={s.recentMeta}>
-                {side === 'right' ? `Consultório ${h.sala}` : ''}
-                <em>{hhmm(tsMs(h))}</em>
-              </span>
+              {side === 'right' && <span className={s.recentMeta}>Consultório {h.sala}</span>}
             </li>
           ))}
         </ul>
@@ -370,17 +372,23 @@ export default function TV() {
       announce(nome, sala);
     };
     // ?demo=1&dupla=1 simula duas chamadas seguidas (tela com dois pacientes)
-    const pair = new URLSearchParams(window.location.search).has('dupla');
-    const first = setTimeout(fire, 6000);
-    const second = pair ? setTimeout(fire, 9000) : null;
-    const every = setInterval(fire, 32000);
+    // ?demo=1&espera=1 mostra só a tela de espera (nenhuma chamada)
+    // No demo a tela volta para a espera 20 s após a chamada (na clínica vale o tempo do Admin)
+    const params = new URLSearchParams(window.location.search);
+    const pair = params.has('dupla');
+    const onlyIdle = params.has('espera');
+    if (onlyIdle) setHistory(h => h.map(x => ({ ...x, ms: x.ms - 3600000 })));
+    const first = onlyIdle ? null : setTimeout(fire, 6000);
+    const second = !onlyIdle && pair ? setTimeout(fire, 9000) : null;
+    const every = onlyIdle ? null : setInterval(fire, 45000);
     return () => { clearTimeout(first); clearTimeout(second); clearInterval(every); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [demo]);
 
   // ---- Derivações (mesma regra do layout anterior) ----
   const lastCallAt = history.length ? tsMs(history[0]) : null;
-  const withinIdle = lastCallAt && nowMs ? (nowMs - lastCallAt) < idleSeconds * 1000 : false;
+  const idleWindowS = demo ? DEMO_IDLE_S : idleSeconds;
+  const withinIdle = lastCallAt && nowMs ? (nowMs - lastCallAt) < idleWindowS * 1000 : false;
   const isIdle = forcedIdle || !history.length || !withinIdle;
 
   let currentGroup = [];
@@ -426,8 +434,8 @@ export default function TV() {
 
       <header className={s.top}>
         <div className={s.brand}>
-          <img className={s.brandMark} src="/logo-simbolo-claro.png" alt="" />
-          <img className={s.brandName} src="/logo-nome-claro.png" alt="Oftalmocenter Hospital de Olhos" />
+          <img className={s.brandMark} src="/logo-simbolo-cores.png" alt="" />
+          <img className={s.brandName} src="/logo-nome-cores.png" alt="Oftalmocenter Hospital de Olhos" />
         </div>
         <div className={s.clock}>
           <span className={s.date}>{dateTxt}</span>
