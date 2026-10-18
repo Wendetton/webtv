@@ -4,6 +4,8 @@
    Animações só com transform/opacity (leves para o Fire TV). */
 
 .screen {
+  --font-serif: 'Cormorant Garamond';
+  --font-sans: 'Plus Jakarta Sans';
   --navy-0: #050b1f;
   --navy-1: #0a1638;
   --royal: #3052ac;

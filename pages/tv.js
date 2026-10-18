@@ -6,21 +6,13 @@
 import Head from 'next/head';
 import Script from 'next/script';
 import { useEffect, useRef, useState } from 'react';
-import { Cormorant_Garamond, Plus_Jakarta_Sans } from 'next/font/google';
 import { db } from '../utils/firebase';
 import { collection, query, orderBy, limit, onSnapshot, doc } from 'firebase/firestore';
 import AmbientPlayer from '../components/sala/AmbientPlayer';
 import PosterCarousel from '../components/sala/PosterCarousel';
 import s from '../components/sala/sala.module.css';
 
-const serif = Cormorant_Garamond({
-  subsets: ['latin'], weight: ['300', '400', '500', '600'], style: ['normal', 'italic'],
-  variable: '--font-serif', display: 'swap',
-});
-const sans = Plus_Jakarta_Sans({
-  subsets: ['latin'], weight: ['300', '400', '500', '600', '700', '800'],
-  variable: '--font-sans', display: 'swap',
-});
+const FONTS_URL = 'https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400;1,500&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap';
 
 const GROUP_WINDOW_MS = 30000;
 const DUAL_KEEP_MS = 60000;
@@ -367,10 +359,13 @@ export default function TV() {
   const dateTxt = nowMs ? new Date(nowMs).toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' }) : '';
 
   return (
-    <div className={`${serif.variable} ${sans.variable} ${s.screen}`}>
+    <div className={s.screen}>
       <Head>
         <title>Oftalmocenter · Sala de espera</title>
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
+        <link rel="stylesheet" href={FONTS_URL} />
       </Head>
 
       {/* Fundo vivo: luzes suaves nas cores da marca */}
