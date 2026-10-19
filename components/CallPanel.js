@@ -21,16 +21,15 @@ const ROOMS = ["1", "2", "3"];
 /* ========== ESTILOS ========== */
 const styles = {
   btnInterrupt: {
-    width: "100%",
-    marginTop: 14,
-    padding: "16px 20px",
-    background: "#ef4444",
-    border: "none",
-    borderRadius: 14,
-    color: "#fff",
-    fontSize: 18,
-    fontWeight: 900,
-    letterSpacing: "0.06em",
+    padding: "6px 12px",
+    background: "rgba(239, 68, 68, 0.08)",
+    border: "1px solid rgba(239, 68, 68, 0.45)",
+    borderRadius: 8,
+    color: "#f87171",
+    fontSize: 12,
+    fontWeight: 700,
+    letterSpacing: "0.02em",
+    textTransform: "none",
     fontFamily: "inherit",
     cursor: "pointer",
     transition: "all .15s ease",
@@ -484,8 +483,8 @@ export default function CallPanel() {
           background: rgba(245, 158, 11, 0.2) !important;
         }
         .btn-interrupt:hover:not(:disabled) {
-          background: #dc2626 !important;
-          box-shadow: 0 8px 30px rgba(239, 68, 68, 0.45);
+          background: rgba(239, 68, 68, 0.2) !important;
+          color: #fecaca !important;
         }
         .btn-clear:hover {
           background: rgba(239, 68, 68, 0.2) !important;
@@ -550,21 +549,20 @@ export default function CallPanel() {
             </button>
           </div>
 
-          {/* Interromper chamada feita por engano */}
-          <button
-            onClick={handleInterrupt}
-            disabled={interrupting}
-            style={styles.btnInterrupt}
-            className="btn-interrupt"
-            title="Tira a chamada da TV, corta a voz e remove do histórico a última chamada"
-          >
-            {interrupting ? "Interrompendo..." : "⛔ INTERROMPER AGORA"}
-          </button>
-
           {/* Status na TV */}
           <div style={styles.tvPreview}>
-            <div style={styles.tvPreviewHeader}>
-              <span>📺</span> Status na TV
+            <div style={{ ...styles.tvPreviewHeader, justifyContent: "space-between" }}>
+              <span><span>📺</span> Status na TV</span>
+              {/* Interromper chamada feita por engano */}
+              <button
+                onClick={handleInterrupt}
+                disabled={interrupting}
+                style={styles.btnInterrupt}
+                className="btn-interrupt"
+                title="Tira a chamada da TV, corta a voz e remove do histórico a última chamada"
+              >
+                {interrupting ? "Interrompendo..." : "⏹ Interromper"}
+              </button>
             </div>
             <div style={styles.tvPreviewRow}>
               <span style={styles.tvPreviewLabel}>Chamando agora:</span>
