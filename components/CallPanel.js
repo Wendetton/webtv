@@ -1,6 +1,7 @@
 // components/CallPanel.js - Redesenhado com rechamar corrigido
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { db } from "../utils/firebase";
+import { sugerirAcentos, palavrasAcentuadas } from "../utils/acentos";
 import {
   collection,
   addDoc,
@@ -20,6 +21,66 @@ const ROOMS = ["1", "2", "3"];
 
 /* ========== ESTILOS ========== */
 const styles = {
+  sugestao: {
+    marginTop: 14,
+    padding: "14px 18px",
+    background: "rgba(34, 197, 94, 0.07)",
+    border: "1px solid rgba(34, 197, 94, 0.35)",
+    borderRadius: 14,
+  },
+  sugestaoLabel: {
+    fontSize: 12,
+    fontWeight: 700,
+    color: "#86efac",
+    textTransform: "uppercase",
+    letterSpacing: "0.06em",
+  },
+  sugestaoNome: {
+    marginTop: 6,
+    fontSize: 22,
+    fontWeight: 800,
+    color: "#f8fafc",
+    wordBreak: "break-word",
+  },
+  sugestaoMudou: {
+    color: "#4ade80",
+    textDecoration: "underline",
+    textDecorationColor: "rgba(74, 222, 128, 0.5)",
+    textUnderlineOffset: 4,
+  },
+  sugestaoAcoes: {
+    marginTop: 12,
+    display: "flex",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 10,
+  },
+  btnSugestao: {
+    padding: "12px 18px",
+    background: "#22c55e",
+    border: "none",
+    borderRadius: 10,
+    color: "#052e16",
+    fontSize: 15,
+    fontWeight: 800,
+    fontFamily: "inherit",
+    cursor: "pointer",
+  },
+  btnUsar: {
+    padding: "11px 14px",
+    background: "transparent",
+    border: "1px solid rgba(255,255,255,0.18)",
+    borderRadius: 10,
+    color: "#cbd5e1",
+    fontSize: 13,
+    fontWeight: 700,
+    fontFamily: "inherit",
+    cursor: "pointer",
+  },
+  sugestaoDica: {
+    fontSize: 12,
+    color: "#64748b",
+  },
   btnInterrupt: {
     padding: "6px 12px",
     background: "rgba(239, 68, 68, 0.08)",
@@ -250,6 +311,20 @@ export default function CallPanel() {
   const [tvAutoIdle, setTvAutoIdle] = useState(false);
   const [tvIdleSeconds, setTvIdleSeconds] = useState(120);
   const [interrupting, setInterrupting] = useState(false);
+  const [learned, setLearned] = useState({}); // acentos aprendidos: { SEM_ACENTO: COM_ACENTO }
+
+  // Correções de acento aprendidas (quando alguém digita o nome acentuado à mão)
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, "nameAccents"), (snap) => {
+      const m = {};
+      snap.docs.forEach(d => { const w = d.data().w; if (w) m[d.id] = String(w); });
+      setLearned(m);
+    }, () => {});
+    return () => unsub();
+  }, []);
+
+  const sugestao = useMemo(() => sugerirAcentos(name, learned), [name, learned]);
+  const temSugestao = Boolean(name.trim()) && sugestao.mudou;
 
   // Restaura ultimo consultorio
   useEffect(() => {
@@ -370,8 +445,17 @@ export default function CallPanel() {
   }
 
   // Chamar paciente
-  async function handleCall() {
-    const nome = (name || "").trim();
+  // Guarda palavras acentuadas à mão que o corretor ainda não conhecia
+  async function aprenderAcentos(nome) {
+    const novas = Object.entries(palavrasAcentuadas(nome))
+      .filter(([chave, certo]) => sugerirAcentos(chave, learned).texto !== certo);
+    for (const [chave, certo] of novas) {
+      try { await setDoc(doc(db, "nameAccents", chave), { w: certo, at: serverTimestamp() }); } catch {}
+    }
+  }
+
+  async function handleCall(nomeEscolhido) {
+    const nome = (typeof nomeEscolhido === "string" ? nomeEscolhido : name || "").trim();
     const sala = (room || "").trim();
     if (!nome) return;
     setBusy(true);
@@ -382,6 +466,7 @@ export default function CallPanel() {
         timestamp: serverTimestamp(),
       });
       await fireAnnounce(nome, sala, false);
+      aprenderAcentos(nome);
       try { localStorage.setItem("last_consultorio", sala); } catch {}
       setRoom(sala);
       setName("");
@@ -459,8 +544,9 @@ export default function CallPanel() {
 
   // Handler Enter
   function handleKeyDown(e) {
+    // Enter chama com o nome corrigido quando houver sugestão de acentos
     if (e.key === "Enter" && name.trim()) {
-      handleCall();
+      handleCall(temSugestao ? sugestao.texto : name);
     }
   }
 
@@ -548,6 +634,32 @@ export default function CallPanel() {
               {busy ? "Chamando..." : "Chamar Paciente"}
             </button>
           </div>
+
+          {/* Sugestão de acentos (nomes do prontuário vêm sem acento) */}
+          {temSugestao && (
+            <div style={styles.sugestao}>
+              <div style={styles.sugestaoLabel}>Sugestão com acentos</div>
+              <div style={styles.sugestaoNome}>
+                {sugestao.partes.map((p, i) => (
+                  <span key={i} style={p.mudou ? styles.sugestaoMudou : undefined}>{p.texto}</span>
+                ))}
+              </div>
+              <div style={styles.sugestaoAcoes}>
+                <button
+                  onClick={() => handleCall(sugestao.texto)}
+                  disabled={busy}
+                  style={styles.btnSugestao}
+                  className="btn-call"
+                >
+                  Chamar com nome corrigido
+                </button>
+                <button onClick={() => setName(sugestao.texto)} style={styles.btnUsar}>
+                  Só corrigir o texto
+                </button>
+                <span style={styles.sugestaoDica}>Enter também chama com o nome corrigido</span>
+              </div>
+            </div>
+          )}
 
           {/* Status na TV */}
           <div style={styles.tvPreview}>
