@@ -15,20 +15,36 @@ const FONTS_URL = 'https://fonts.googleapis.com/css2?family=Cormorant+Garamond:i
 
 const GROUP_WINDOW_MS = 30000;
 const DUAL_KEEP_MS = 60000;
-const OVERLAY_MS = 9500;
+const OVERLAY_MS = 10500;
 const OVERLAY_MS_QUEUED = 7500;
 const OVERLAY_EXIT_MS = 1400;
 const PHRASE_MS = 14000;
 const RECENT_PER_SIDE = 2;
 const DEMO_IDLE_S = 20;
 
-const PHRASES = [
-  'Fique à vontade. Em instantes você será chamado.',
-  'Cuidar da sua visão é o nosso propósito.',
-  'Respire fundo e aproveite este momento de calma.',
-  'Nossa equipe está à disposição para o que precisar.',
-  'Obrigado pela confiança em nosso cuidado.',
+// Conteúdo que gira embaixo do "Seja bem-vindo".
+// A frase "Você será chamado pelo nome..." volta com frequência: ela dá permissão
+// para o paciente tirar os olhos da TV sem medo de perder a vez.
+const CALMA = { tipo: 'frase', texto: 'Você será chamado pelo nome, em voz alta. Pode relaxar.' };
+const ESPERA = [
+  CALMA,
+  { tipo: 'frase', texto: 'Fique à vontade. Em instantes você será chamado.' },
+  { tipo: 'curiosidade', texto: 'Piscamos de 15 a 20 vezes por minuto. Cada piscada lubrifica e protege os olhos.' },
+  { tipo: 'frase', texto: 'Cuidar da sua visão é o nosso propósito.' },
+  { tipo: 'respirar' },
+  CALMA,
+  { tipo: 'curiosidade', texto: 'A córnea não tem vasos sanguíneos: ela recebe oxigênio diretamente do ar.' },
+  { tipo: 'frase', texto: 'Nossa equipe está à disposição para o que precisar.' },
+  { tipo: 'curiosidade', texto: 'Regra 20-20-20: a cada 20 minutos de tela, olhe por 20 segundos para algo a 6 metros.' },
+  CALMA,
+  { tipo: 'curiosidade', texto: 'O olho humano consegue distinguir cerca de um milhão de tons de cor.' },
+  { tipo: 'respirar' },
+  { tipo: 'frase', texto: 'Obrigado pela confiança em nosso cuidado.' },
+  { tipo: 'curiosidade', texto: 'Óculos de sol com proteção UV ajudam a proteger os olhos da radiação do sol.' },
 ];
+const BREATH_MS = 10000;            // mesmo ritmo da íris: 5 s inspirando, 5 s expirando
+const BREATH_SHOW_MS = BREATH_MS * 2;
+const CHIME_LEAD_MS = 1300;         // som suave antes da voz
 
 const DEMO_NAMES = [
   ['Maria Helena Albuquerque', '1'], ['Carlos Eduardo Ferreira da Silva', '2'], ['Ana Beatriz Costa', '3'],
@@ -80,6 +96,38 @@ function playQueue(audioQueueRef, playingRef, genRef) {
   } catch {}
 }
 
+/* ===== Som suave antes da voz (dois tons, como um sino leve) ===== */
+let chimeCtx = null;
+function playChime() {
+  try {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return;
+    if (!chimeCtx) chimeCtx = new Ctx();
+    const ctx = chimeCtx;
+    if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+    const t0 = ctx.currentTime + 0.05;
+    const master = ctx.createGain();
+    master.gain.value = 0.22;
+    master.connect(ctx.destination);
+    // Mi5 e depois Dó5, com ataque macio e cauda longa
+    [[659.25, 0], [523.25, 0.42]].forEach(([freq, delay]) => {
+      [1, 2].forEach((harm, h) => {
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.type = 'sine';
+        o.frequency.value = freq * harm;
+        const peak = h === 0 ? 1 : 0.18;
+        g.gain.setValueAtTime(0.0001, t0 + delay);
+        g.gain.exponentialRampToValueAtTime(peak, t0 + delay + 0.04);
+        g.gain.exponentialRampToValueAtTime(0.0001, t0 + delay + 1.6);
+        o.connect(g); g.connect(master);
+        o.start(t0 + delay);
+        o.stop(t0 + delay + 1.7);
+      });
+    });
+  } catch {}
+}
+
 /* ===== Utilitários ===== */
 function tsMs(item) {
   if (!item) return null;
@@ -88,12 +136,6 @@ function tsMs(item) {
   if (t && typeof t.toMillis === 'function') return t.toMillis();
   if (t && t.seconds) return t.seconds * 1000;
   return null;
-}
-
-function hhmm(ms) {
-  if (!ms) return '';
-  const d = new Date(ms);
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
 function nameSize(nome, base) {
@@ -115,20 +157,57 @@ function Words({ text, baseDelay = 0, step = 90 }) {
 /* ===== Blocos visuais ===== */
 function Welcome() {
   const [i, setI] = useState(0);
+  const mountRef = useRef(0);
   useEffect(() => {
-    const t = setInterval(() => setI(x => (x + 1) % PHRASES.length), PHRASE_MS);
-    return () => clearInterval(t);
+    mountRef.current = Date.now();
+    // Demo: /tv?demo=1&espera=1&item=4 começa num conteúdo específico (4 = respiração)
+    try {
+      const p = new URLSearchParams(window.location.search);
+      const n = Number(p.get('item'));
+      if (p.has('demo') && Number.isInteger(n) && n >= 0 && n < ESPERA.length) setI(n);
+    } catch {}
   }, []);
+  useEffect(() => {
+    const ms = ESPERA[i].tipo === 'respirar' ? BREATH_SHOW_MS : PHRASE_MS;
+    const t = setTimeout(() => setI(x => (x + 1) % ESPERA.length), ms);
+    return () => clearTimeout(t);
+  }, [i]);
+  const item = ESPERA[i];
+  // Sincroniza "inspire/expire" com a íris: lê em que ponto da respiração o círculo está
+  const irisRef = useRef(null);
+  const [breathDelay, setBreathDelay] = useState(0);
+  useEffect(() => {
+    if (item.tipo !== 'respirar') return;
+    let elapsed = Date.now() - (mountRef.current || Date.now());
+    try {
+      const anim = irisRef.current && irisRef.current.getAnimations && irisRef.current.getAnimations()[0];
+      if (anim && Number.isFinite(Number(anim.currentTime))) elapsed = Number(anim.currentTime);
+    } catch {}
+    setBreathDelay(-(elapsed % BREATH_MS));
+  }, [i, item.tipo]);
   return (
     <div className={s.welcome}>
       <div className={s.iris} aria-hidden>
-        <span /><span /><span />
+        <span ref={irisRef} /><span /><span />
       </div>
       <div className={s.eyebrow}>Sala de espera</div>
       <h1 className={s.welcomeTitle}>
         Seja <em>bem-vindo</em>
       </h1>
-      <p key={i} className={s.phrase}>{PHRASES[i]}</p>
+      {item.tipo === 'respirar' ? (
+        <div key={i} className={s.breath} style={{ animationDuration: `${BREATH_SHOW_MS}ms` }}>
+          <span className={s.breathLabel}>Respire junto com o círculo</span>
+          <span className={s.breathWords} aria-hidden>
+            <span className={s.breathIn} style={{ animationDelay: `${breathDelay}ms` }}>inspire…</span>
+            <span className={s.breathOut} style={{ animationDelay: `${breathDelay}ms` }}>expire…</span>
+          </span>
+        </div>
+      ) : (
+        <div key={i} className={s.phraseBox}>
+          {item.tipo === 'curiosidade' && <span className={s.didYouKnow}>Você sabia?</span>}
+          <p className={s.phrase}>{item.texto}</p>
+        </div>
+      )}
     </div>
   );
 }
@@ -288,6 +367,7 @@ export default function TV() {
   const overlayQueueRef = useRef([]);
   const overlayBusyRef = useRef(false);
   const overlayTimersRef = useRef([]);
+  const chimeTimersRef = useRef([]);
   const audioGenRef = useRef(0);
   const initInterruptRef = useRef(false);
   const lastInterruptRef = useRef('');
@@ -338,14 +418,22 @@ export default function TV() {
 
   function announce(nome, sala) {
     if (!nome) return;
-    enqueueAudio(audioQueueRef, playingRef, nome, sala, audioGenRef);
+    // Primeiro um som suave e a tela entrando devagar; a voz vem logo depois
+    playChime();
     overlayQueueRef.current.push({ key: `${Date.now()}-${Math.random()}`, nome, sala });
     showNextOverlay();
+    const gen = audioGenRef.current;
+    chimeTimersRef.current.push(setTimeout(() => {
+      if (gen !== audioGenRef.current) return; // interrompido nesse meio-tempo
+      enqueueAudio(audioQueueRef, playingRef, nome, sala, audioGenRef);
+    }, CHIME_LEAD_MS));
   }
 
   // ---- INTERROMPER AGORA: some da tela e a voz é cortada na hora ----
   function interruptNow() {
     audioGenRef.current += 1;
+    chimeTimersRef.current.forEach(clearTimeout);
+    chimeTimersRef.current = [];
     audioQueueRef.current = [];
     playingRef.current = false;
     try { if (typeof window.tvStopAnnounce === 'function') window.tvStopAnnounce(); } catch {}
@@ -509,7 +597,6 @@ export default function TV() {
   const recentRight = past.filter(h => sideOf(h.sala) === 'right').slice(0, RECENT_PER_SIDE);
   const laneKey = list => list.map(x => x.id).join('|') || 'vazio';
 
-  const timeTxt = nowMs ? hhmm(nowMs) : '';
   const dateTxt = nowMs ? new Date(nowMs).toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' }) : '';
 
   return (
@@ -537,7 +624,6 @@ export default function TV() {
         </div>
         <div className={s.clock}>
           <span className={s.date}>{dateTxt}</span>
-          <span className={s.time}>{timeTxt}</span>
         </div>
       </header>
 
