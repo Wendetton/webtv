@@ -280,17 +280,13 @@ const styles = {
     transition: "all 0.2s",
     whiteSpace: "nowrap",
   },
-  clearSection: {
-    paddingTop: 16,
-    borderTop: "1px solid rgba(255,255,255,0.08)",
-  },
   btnClear: {
-    padding: "12px 20px",
-    background: "rgba(239, 68, 68, 0.1)",
+    padding: "6px 12px",
+    background: "transparent",
     border: "1px solid rgba(239, 68, 68, 0.3)",
-    borderRadius: 10,
-    color: "#ef4444",
-    fontSize: 14,
+    borderRadius: 8,
+    color: "#f87171",
+    fontSize: 12,
     fontWeight: 700,
     fontFamily: "inherit",
     cursor: "pointer",
@@ -422,7 +418,7 @@ export default function CallPanel() {
   
   // Texto do "Chamando agora" - mostra todos os pacientes do grupo
   const tvNow = tvIsIdle
-    ? "- (Logo exibida)"
+    ? "Ninguém — a TV está na tela de espera"
     : currentGroup.length > 1
       ? currentGroup.map(p => `${p.nome} - Cons. ${p.sala}`).join("  |  ")
       : (currentGroup[0]?.nome ? `${currentGroup[0].nome} - Consultório ${currentGroup[0].sala}` : "-");
@@ -661,10 +657,10 @@ export default function CallPanel() {
             </div>
           )}
 
-          {/* Status na TV */}
+          {/* O que está na TV agora */}
           <div style={styles.tvPreview}>
             <div style={{ ...styles.tvPreviewHeader, justifyContent: "space-between" }}>
-              <span><span>📺</span> Status na TV</span>
+              <span><span>📺</span> Agora na TV</span>
               {/* Interromper chamada feita por engano */}
               <button
                 onClick={handleInterrupt}
@@ -684,8 +680,16 @@ export default function CallPanel() {
 
           {/* Historico */}
           <div style={styles.historySection}>
-            <div style={styles.historyHeader}>
+            <div style={{ ...styles.historyHeader, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
               <h3 style={styles.historyTitle}>Últimos chamados</h3>
+              <button
+                onClick={handleClearHistory}
+                style={styles.btnClear}
+                className="btn-clear"
+                title="Apaga todo o histórico de chamadas"
+              >
+                🗑️ Limpar histórico
+              </button>
             </div>
             <div style={styles.historyList}>
               {list.length ? list.map((it) => (
@@ -708,16 +712,6 @@ export default function CallPanel() {
             </div>
           </div>
 
-          {/* Limpar historico */}
-          <div style={styles.clearSection}>
-            <button
-              onClick={handleClearHistory}
-              style={styles.btnClear}
-              className="btn-clear"
-            >
-              🗑️ Limpar Histórico
-            </button>
-          </div>
         </div>
       </section>
     </>

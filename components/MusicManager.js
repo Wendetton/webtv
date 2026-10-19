@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { db, storage } from '../utils/firebase';
 import {
   collection, addDoc, serverTimestamp, query, orderBy, onSnapshot,
-  doc, deleteDoc, updateDoc
+  doc, deleteDoc, updateDoc, setDoc
 } from 'firebase/firestore';
 import { ref as storageRef, uploadBytesResumable, getDownloadURL, deleteObject } from 'firebase/storage';
 
@@ -36,6 +36,13 @@ const styles = {
   body: {
     padding: "16px 18px",
   },
+  controls: {
+    padding: "12px 14px",
+    marginBottom: 14,
+    background: "rgba(255,255,255,0.02)",
+    border: "1px solid rgba(255,255,255,0.08)",
+    borderRadius: 10,
+  },
   btnAdd: {
     width: "100%",
     padding: "11px 14px",
@@ -64,7 +71,7 @@ const styles = {
   list: {
     display: "grid",
     gap: 6,
-    maxHeight: 190,
+    maxHeight: 360,
     overflowY: "auto",
   },
   item: {
@@ -143,6 +150,58 @@ function titleFromFile(name) {
     .replace(/[_]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim() || 'Música';
+}
+
+// Volume da música e ordem aleatória (config/control)
+function MusicControls() {
+  const [vol, setVol] = useState(40);
+  const [shuffle, setShuffle] = useState(false);
+  const tRef = useRef(null);
+
+  useEffect(() => {
+    const unsub = onSnapshot(doc(db, 'config', 'control'), (snap) => {
+      const d = snap.exists() ? snap.data() : {};
+      if (Number.isFinite(d.musicVolume)) setVol(d.musicVolume);
+      setShuffle(Boolean(d.musicShuffle));
+    });
+    return () => unsub();
+  }, []);
+
+  function save(payload) {
+    return setDoc(doc(db, 'config', 'control'), { ...payload, updatedAt: Date.now() }, { merge: true }).catch(() => {});
+  }
+
+  return (
+    <div style={styles.controls}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <span style={{ fontSize: 16 }} aria-hidden>🔈</span>
+        <input
+          type="range"
+          min={0}
+          max={100}
+          value={vol}
+          onChange={(e) => {
+            const v = Number(e.target.value);
+            setVol(v);
+            window.clearTimeout(tRef.current);
+            tRef.current = window.setTimeout(() => save({ musicVolume: v }), 150);
+          }}
+          style={{ flex: 1, height: 8, WebkitAppearance: 'none', background: 'rgba(255,255,255,0.1)', borderRadius: 4, outline: 'none' }}
+          aria-label="Volume da música"
+        />
+        <span style={{ fontSize: 15, fontWeight: 800, minWidth: 44, textAlign: 'right' }}>{vol}%</span>
+      </div>
+      <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, fontSize: 13, fontWeight: 600, cursor: 'pointer', color: '#cbd5e1' }}>
+        <input
+          type="checkbox"
+          checked={shuffle}
+          onChange={(e) => { setShuffle(e.target.checked); save({ musicShuffle: e.target.checked }); }}
+          style={{ width: 16, height: 16, accentColor: '#3b82f6' }}
+        />
+        Tocar em ordem aleatória
+      </label>
+    </div>
+  );
 }
 
 export default function MusicManager() {
@@ -241,12 +300,13 @@ export default function MusicManager() {
   return (
     <div style={styles.card}>
       <div style={styles.header}>
-        <span>🎵 Músicas ambiente</span>
+        <span>🎵 Música ambiente</span>
         <span style={styles.headerInfo}>
           {items.length} faixa{items.length === 1 ? '' : 's'}{totalSize ? ` · ${fmtMB(totalSize)}` : ''}
         </span>
       </div>
       <div style={styles.body}>
+        <MusicControls />
         <input
           ref={fileRef}
           type="file"

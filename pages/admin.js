@@ -1,14 +1,15 @@
-// pages/admin.js - Painel de chamadas + música ambiente da sala de espera
-import { useEffect, useState, useRef } from "react";
+// pages/admin.js - Painel de chamadas da sala de espera
+// Esquerda: chamar paciente, o que está na TV e últimos chamados.
+// Direita: música ambiente. Engrenagem: configurações da voz e da TV.
+import { useEffect, useState } from "react";
 import { db } from "../utils/firebase";
-import {
-  collection, query, orderBy, limit, onSnapshot,
-  doc, getDoc, setDoc, updateDoc
-} from "firebase/firestore";
+import { doc, onSnapshot } from "firebase/firestore";
 import CallPanel from "../components/CallPanel";
-import CarouselManager from '../components/CarouselManager';
-import MusicManager from '../components/MusicManager';
-import AnnounceSettings from "../components/AnnounceSettings";
+import MusicManager from "../components/MusicManager";
+import AdminSettings from "../components/AdminSettings";
+
+// A TV avisa a cada minuto (config/tvStatus.lastSeen); passou disso com folga, está sem sinal
+const TV_ONLINE_MS = 150 * 1000;
 
 /* ========== ESTILOS ========== */
 const styles = {
@@ -18,11 +19,10 @@ const styles = {
     color: "#f8fafc",
     fontFamily: "'Plus Jakarta Sans', system-ui, -apple-system, sans-serif",
   },
-  
   header: {
     background: "linear-gradient(180deg, rgba(17,24,39,0.98) 0%, rgba(10,15,26,0.95) 100%)",
     borderBottom: "1px solid rgba(255,255,255,0.08)",
-    padding: "16px 24px",
+    padding: "14px 24px",
     position: "sticky",
     top: 0,
     zIndex: 100,
@@ -34,28 +34,31 @@ const styles = {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
+    gap: 16,
   },
   logoArea: {
     display: "flex",
     alignItems: "center",
     gap: 12,
   },
-  logoIcon: {
-    width: 40,
-    height: 40,
-    background: "linear-gradient(135deg, #5bb8d4 0%, #2563eb 100%)",
-    borderRadius: 10,
+  logoBadge: {
+    width: 42,
+    height: 42,
+    borderRadius: 11,
+    background: "#ffffff",
     display: "grid",
     placeItems: "center",
-    fontSize: 20,
   },
-  logoTextH1: {
+  logoImg: {
+    width: 32,
+    height: "auto",
+  },
+  logoTitle: {
     fontSize: 18,
     fontWeight: 800,
     letterSpacing: "-0.02em",
-    margin: 0,
   },
-  logoTextSpan: {
+  logoText: {
     fontSize: 12,
     color: "#94a3b8",
     fontWeight: 500,
@@ -63,65 +66,55 @@ const styles = {
   headerActions: {
     display: "flex",
     alignItems: "center",
-    gap: 16,
+    gap: 12,
   },
-  tvStatus: {
+  tvPill: {
     display: "flex",
     alignItems: "center",
     gap: 8,
     padding: "8px 14px",
-    background: "rgba(59, 130, 246, 0.1)",
-    border: "1px solid rgba(59, 130, 246, 0.2)",
     borderRadius: 20,
     fontSize: 13,
-    fontWeight: 600,
+    fontWeight: 700,
+    whiteSpace: "nowrap",
   },
-  tvStatusDot: {
+  tvDot: {
     width: 8,
     height: 8,
-    background: "#3b82f6",
     borderRadius: "50%",
   },
   btnConfig: {
-    display: "flex",
-    alignItems: "center",
-    gap: 8,
-    padding: "10px 16px",
+    padding: "9px 14px",
     background: "#111827",
-    border: "1px solid rgba(255,255,255,0.12)",
+    border: "1px solid rgba(255,255,255,0.1)",
     borderRadius: 10,
     color: "#f8fafc",
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: 600,
+    fontFamily: "inherit",
     cursor: "pointer",
     transition: "all 0.2s",
   },
-  
   main: {
     maxWidth: 1400,
     margin: "0 auto",
     padding: 24,
-    display: "flex",
-    flexDirection: "column",
-    gap: 24,
-  },
-  
-  mediaSection: {
     display: "grid",
-    gridTemplateColumns: "1fr 1fr 1fr",
-    gap: 20,
+    gridTemplateColumns: "minmax(0, 1.75fr) minmax(320px, 1fr)",
+    gap: 24,
+    alignItems: "start",
   },
-  
   modalOverlay: {
     position: "fixed",
     inset: 0,
     background: "rgba(0,0,0,0.7)",
     backdropFilter: "blur(4px)",
-    zIndex: 1000,
+    zIndex: 200,
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    transition: "all 0.3s",
+    padding: 24,
+    transition: "opacity 0.3s, visibility 0.3s",
   },
   modalOverlayHidden: {
     opacity: 0,
@@ -130,142 +123,87 @@ const styles = {
   },
   modal: {
     background: "#111827",
-    border: "1px solid rgba(255,255,255,0.08)",
+    border: "1px solid rgba(255,255,255,0.1)",
     borderRadius: 20,
-    width: "90%",
-    maxWidth: 600,
-    maxHeight: "85vh",
-    overflow: "hidden",
-    transform: "translateY(0) scale(1)",
-    transition: "all 0.3s",
+    width: "100%",
+    maxWidth: 620,
+    maxHeight: "90vh",
+    overflow: "auto",
+    transition: "transform 0.3s",
   },
   modalHidden: {
-    transform: "translateY(20px) scale(0.95)",
+    transform: "scale(0.95)",
   },
   modalHeader: {
-    padding: "20px 24px",
+    padding: "18px 24px",
     borderBottom: "1px solid rgba(255,255,255,0.08)",
     display: "flex",
-    alignItems: "center",
     justifyContent: "space-between",
+    alignItems: "center",
+    position: "sticky",
+    top: 0,
+    background: "#111827",
+    zIndex: 1,
   },
   modalHeaderH2: {
     fontSize: 18,
     fontWeight: 800,
-    display: "flex",
-    alignItems: "center",
-    gap: 10,
     margin: 0,
   },
   btnClose: {
     width: 36,
     height: 36,
-    display: "grid",
-    placeItems: "center",
     background: "rgba(255,255,255,0.05)",
-    border: "1px solid rgba(255,255,255,0.08)",
-    borderRadius: 10,
-    color: "#f8fafc",
+    border: "none",
+    borderRadius: 8,
+    color: "#94a3b8",
     fontSize: 18,
     cursor: "pointer",
-    transition: "all 0.2s",
+    display: "grid",
+    placeItems: "center",
   },
   modalBody: {
     padding: 24,
-    overflowY: "auto",
-    maxHeight: "calc(85vh - 80px)",
   },
 };
 
-/* ========== COMPONENTE: Volume da música ambiente ========== */
-function MusicVolume() {
-  const [val, setVal] = useState(40);
-  const [shuffle, setShuffle] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const tRef = useRef(null);
+/* ========== Indicador real de TV ligada ========== */
+function TvStatusPill() {
+  const [lastSeen, setLastSeen] = useState(null);
+  const [now, setNow] = useState(Date.now());
 
   useEffect(() => {
-    const ref = doc(db, "config", "control");
-    const unsub = onSnapshot(ref, (snap) => {
-      const d = snap.exists() ? snap.data() : {};
-      if (Number.isFinite(d.musicVolume)) setVal(d.musicVolume);
-      setShuffle(Boolean(d.musicShuffle));
-    });
-    return () => unsub();
+    const unsub = onSnapshot(doc(db, "config", "tvStatus"), (snap) => {
+      const t = snap.exists() ? snap.data().lastSeen : null;
+      setLastSeen(t && typeof t.toMillis === "function" ? t.toMillis() : null);
+    }, () => {});
+    const tick = setInterval(() => setNow(Date.now()), 15000);
+    return () => { unsub(); clearInterval(tick); };
   }, []);
 
-  async function save(payload) {
-    const ref = doc(db, "config", "control");
-    try {
-      setSaving(true);
-      const snap = await getDoc(ref);
-      const data = { ...payload, updatedAt: Date.now() };
-      if (snap.exists()) await updateDoc(ref, data);
-      else await setDoc(ref, data, { merge: true });
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  function push(v) {
-    window.clearTimeout(tRef.current);
-    tRef.current = window.setTimeout(() => save({ musicVolume: v }), 150);
+  const online = lastSeen && now - lastSeen < TV_ONLINE_MS;
+  let label = "TV sem sinal";
+  if (online) label = "TV ligada";
+  else if (lastSeen) {
+    const min = Math.round((now - lastSeen) / 60000);
+    label = min < 60 ? `TV sem sinal há ${min} min` : "TV desligada";
   }
 
   return (
-    <div style={{
-      background: "#111827",
-      border: "1px solid rgba(255,255,255,0.08)",
-      borderRadius: 16,
-      overflow: "hidden",
-    }}>
-      <div style={{
-        padding: "14px 18px",
-        borderBottom: "1px solid rgba(255,255,255,0.08)",
-        background: "rgba(255,255,255,0.02)",
-        fontSize: 14,
-        fontWeight: 700,
-        display: "flex",
-        alignItems: "center",
-        gap: 8,
-      }}>
-        <span>🔊</span> Volume da música
-      </div>
-      <div style={{ padding: "16px 18px" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <input
-            type="range"
-            min={0}
-            max={100}
-            value={val}
-            onChange={(e) => { const v = Number(e.target.value); setVal(v); push(v); }}
-            style={{
-              flex: 1,
-              height: 8,
-              WebkitAppearance: "none",
-              background: "rgba(255,255,255,0.1)",
-              borderRadius: 4,
-              outline: "none",
-            }}
-          />
-          <span style={{ fontSize: 16, fontWeight: 800, minWidth: 50, textAlign: "right" }}>
-            {val}%
-          </span>
-        </div>
-        <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 14, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
-          <input
-            type="checkbox"
-            checked={shuffle}
-            onChange={(e) => { setShuffle(e.target.checked); save({ musicShuffle: e.target.checked }); }}
-            style={{ width: 16, height: 16, accentColor: "#3b82f6" }}
-          />
-          Tocar em ordem aleatória
-        </label>
-        <p style={{ marginTop: 12, fontSize: 12, color: "#94a3b8", lineHeight: 1.4 }}>
-          Volume da música ambiente na TV da sala de espera.
-          {saving && <span style={{ marginLeft: 8, color: "#3b82f6" }}>Salvando...</span>}
-        </p>
-      </div>
+    <div
+      style={{
+        ...styles.tvPill,
+        background: online ? "rgba(34, 197, 94, 0.1)" : "rgba(148, 163, 184, 0.08)",
+        border: `1px solid ${online ? "rgba(34, 197, 94, 0.35)" : "rgba(148, 163, 184, 0.25)"}`,
+        color: online ? "#86efac" : "#94a3b8",
+      }}
+      title={online ? "A tela da sala de espera está aberta e recebendo as chamadas" : "A tela da sala de espera não deu sinal recentemente"}
+    >
+      <div
+        style={{ ...styles.tvDot, background: online ? "#22c55e" : "#64748b" }}
+        className={online ? "tv-dot" : undefined}
+      />
+      <span>{label}</span>
     </div>
   );
 }
@@ -276,36 +214,28 @@ export default function Admin() {
 
   return (
     <div style={styles.page}>
-      {/* Importar fonte */}
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap');
-        
+
         @keyframes pulse {
           0%, 100% { opacity: 1; transform: scale(1); }
           50% { opacity: 0.6; transform: scale(1.1); }
         }
-        
-        .tv-dot {
-          animation: pulse 2s infinite;
-        }
-        
+        .tv-dot { animation: pulse 2s infinite; }
         .btn-config:hover {
           background: #1a2332 !important;
           border-color: rgba(255,255,255,0.2) !important;
         }
-        
-        .btn-close:hover {
-          background: rgba(255,255,255,0.1) !important;
+        .btn-close:hover { background: rgba(255,255,255,0.1) !important; }
+
+        /* Telas menores: uma coluna só */
+        @media (max-width: 1100px) {
+          .admin-main { grid-template-columns: 1fr !important; }
         }
-        
-        /* Responsividade */
-        @media (max-width: 900px) {
-          .media-section {
-            grid-template-columns: 1fr !important;
-          }
+        @media (max-width: 640px) {
+          .admin-logo-text { display: none; }
         }
-        
-        /* Slider thumb */
+
         input[type="range"]::-webkit-slider-thumb {
           -webkit-appearance: none;
           width: 20px;
@@ -316,23 +246,22 @@ export default function Admin() {
         }
       `}</style>
 
-      {/* ===== HEADER ===== */}
+      {/* ===== TOPO ===== */}
       <header style={styles.header}>
         <div style={styles.headerContent}>
           <div style={styles.logoArea}>
-            <div style={styles.logoIcon}>📢</div>
+            <div style={styles.logoBadge}>
+              <img src="/logo-simbolo-cores.png" alt="" style={styles.logoImg} />
+            </div>
             <div>
-              <h1 style={styles.logoTextH1}>Oftalmocenter</h1>
-              <span style={styles.logoTextSpan}>Painel de Chamadas</span>
+              <div style={styles.logoTitle}>Oftalmocenter</div>
+              <div style={styles.logoText} className="admin-logo-text">Painel de Chamadas</div>
             </div>
           </div>
           <div style={styles.headerActions}>
-            <div style={styles.tvStatus}>
-              <div style={styles.tvStatusDot} className="tv-dot"></div>
-              <span>TV Conectada</span>
-            </div>
-            <button 
-              style={styles.btnConfig} 
+            <TvStatusPill />
+            <button
+              style={styles.btnConfig}
               className="btn-config"
               onClick={() => setConfigOpen(true)}
             >
@@ -342,21 +271,14 @@ export default function Admin() {
         </div>
       </header>
 
-      {/* ===== MAIN ===== */}
-      <main style={styles.main}>
-        {/* Seção de Chamadas (topo - destaque) */}
+      {/* ===== CORPO ===== */}
+      <main style={styles.main} className="admin-main">
         <CallPanel />
-
-        {/* Seção de Mídia (inferior - 3 colunas) */}
-        <section style={styles.mediaSection} className="media-section">
-          <MusicManager />
-          <MusicVolume />
-          <CarouselManager />
-        </section>
+        <MusicManager />
       </main>
 
-      {/* ===== MODAL DE CONFIGURAÇÕES ===== */}
-      <div 
+      {/* ===== CONFIGURAÇÕES ===== */}
+      <div
         style={{
           ...styles.modalOverlay,
           ...(configOpen ? {} : styles.modalOverlayHidden),
@@ -371,7 +293,7 @@ export default function Admin() {
         }}>
           <div style={styles.modalHeader}>
             <h2 style={styles.modalHeaderH2}>⚙️ Configurações</h2>
-            <button 
+            <button
               style={styles.btnClose}
               className="btn-close"
               onClick={() => setConfigOpen(false)}
@@ -380,7 +302,7 @@ export default function Admin() {
             </button>
           </div>
           <div style={styles.modalBody}>
-            <AnnounceSettings />
+            <AdminSettings onSaved={() => setTimeout(() => setConfigOpen(false), 900)} />
           </div>
         </div>
       </div>

@@ -7,7 +7,7 @@ import Head from 'next/head';
 import Script from 'next/script';
 import { useEffect, useRef, useState } from 'react';
 import { db } from '../utils/firebase';
-import { collection, query, orderBy, limit, onSnapshot, doc } from 'firebase/firestore';
+import { collection, query, orderBy, limit, onSnapshot, doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import AmbientPlayer from '../components/sala/AmbientPlayer';
 import s from '../components/sala/sala.module.css';
 
@@ -386,6 +386,21 @@ export default function TV() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [demo]);
+
+  // ---- Sinal de vida: o Admin mostra "TV ligada" enquanto este aviso chegar a cada minuto ----
+  useEffect(() => {
+    if (demo) return undefined;
+    const ping = () => {
+      setDoc(doc(db, 'config', 'tvStatus'), {
+        lastSeen: serverTimestamp(),
+        page: '/tv',
+        app: typeof window.AndroidTTS !== 'undefined' ? 'firetv' : 'navegador',
+      }, { merge: true }).catch(() => {});
+    };
+    ping();
+    const t = setInterval(ping, 60000);
+    return () => clearInterval(t);
   }, [demo]);
 
   // ---- Histórico de chamadas ----
