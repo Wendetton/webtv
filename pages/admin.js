@@ -1,6 +1,6 @@
 // pages/admin.js - Painel de chamadas da sala de espera
-// Esquerda: chamar paciente, o que está na TV e últimos chamados.
-// Direita: música ambiente. Engrenagem: configurações da voz e da TV.
+// Em destaque: chamar paciente, o que está na TV e últimos chamados.
+// Embaixo, recolhida: música ambiente e volume. Engrenagem: configurações da voz e da TV.
 import { useEffect, useState } from "react";
 import { db } from "../utils/firebase";
 import { doc, onSnapshot } from "firebase/firestore";
@@ -29,7 +29,7 @@ const styles = {
     backdropFilter: "blur(12px)",
   },
   headerContent: {
-    maxWidth: 1400,
+    maxWidth: 1040,
     margin: "0 auto",
     display: "flex",
     justifyContent: "space-between",
@@ -96,13 +96,12 @@ const styles = {
     transition: "all 0.2s",
   },
   main: {
-    maxWidth: 1400,
+    maxWidth: 1040,
     margin: "0 auto",
     padding: 24,
-    display: "grid",
-    gridTemplateColumns: "minmax(0, 1.75fr) minmax(320px, 1fr)",
-    gap: 24,
-    alignItems: "start",
+    display: "flex",
+    flexDirection: "column",
+    gap: 20,
   },
   modalOverlay: {
     position: "fixed",
@@ -228,10 +227,6 @@ export default function Admin() {
         }
         .btn-close:hover { background: rgba(255,255,255,0.1) !important; }
 
-        /* Telas menores: uma coluna só */
-        @media (max-width: 1100px) {
-          .admin-main { grid-template-columns: 1fr !important; }
-        }
         @media (max-width: 640px) {
           .admin-logo-text { display: none; }
         }

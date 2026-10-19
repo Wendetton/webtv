@@ -28,6 +28,14 @@ const styles = {
     justifyContent: "space-between",
     gap: 8,
   },
+  headerButton: {
+    width: "100%",
+    border: "none",
+    color: "inherit",
+    fontFamily: "inherit",
+    textAlign: "left",
+    cursor: "pointer",
+  },
   headerInfo: {
     fontSize: 11,
     fontWeight: 600,
@@ -70,6 +78,7 @@ const styles = {
   },
   list: {
     display: "grid",
+    gridTemplateColumns: "minmax(0, 1fr)",
     gap: 6,
     maxHeight: 360,
     overflowY: "auto",
@@ -86,6 +95,7 @@ const styles = {
     gap: 8,
   },
   itemTitle: {
+    flex: "1 1 0",
     fontWeight: 600,
     color: "#e2e8f0",
     whiteSpace: "nowrap",
@@ -297,15 +307,33 @@ export default function MusicManager() {
 
   const totalSize = items.reduce((acc, x) => acc + (Number(x.size) || 0), 0);
 
+  // Usado de vez em quando: fica recolhido, e o painel lembra se você deixou aberto
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    try { setOpen(localStorage.getItem('admin_musica_aberta') === '1'); } catch {}
+  }, []);
+  function toggle() {
+    setOpen(v => {
+      try { localStorage.setItem('admin_musica_aberta', v ? '0' : '1'); } catch {}
+      return !v;
+    });
+  }
+
   return (
     <div style={styles.card}>
-      <div style={styles.header}>
-        <span>🎵 Música ambiente</span>
+      <button
+        type="button"
+        onClick={toggle}
+        style={{ ...styles.header, ...styles.headerButton, borderBottom: open ? styles.header.borderBottom : 'none' }}
+        aria-expanded={open}
+      >
+        <span>🎵 Música ambiente e volume</span>
         <span style={styles.headerInfo}>
-          {items.length} faixa{items.length === 1 ? '' : 's'}{totalSize ? ` · ${fmtMB(totalSize)}` : ''}
+          {uploading ? `Enviando ${uploading.pct}%` : `${items.length} faixa${items.length === 1 ? '' : 's'}${totalSize ? ` · ${fmtMB(totalSize)}` : ''}`}
+          <span style={{ marginLeft: 12, display: 'inline-block', fontSize: 18, lineHeight: 1, color: '#cbd5e1', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .2s' }}>⌄</span>
         </span>
-      </div>
-      <div style={styles.body}>
+      </button>
+      <div style={{ ...styles.body, display: open ? 'block' : 'none' }}>
         <MusicControls />
         <input
           ref={fileRef}
