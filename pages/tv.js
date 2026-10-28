@@ -186,6 +186,8 @@ function Welcome() {
     setBreathDelay(-(elapsed % BREATH_MS));
   }, [i, item.tipo]);
   return (
+    <>
+      <RoomGuide side="left" />
     <div className={s.welcome}>
       <div className={s.iris} aria-hidden>
         <span ref={irisRef} /><span /><span />
@@ -209,12 +211,65 @@ function Welcome() {
         </div>
       )}
     </div>
+      <RoomGuide side="right" />
+    </>
   );
 }
 
 // De que lado o paciente deve ir, do ponto de vista de quem olha a TV
 const ROOM_SIDE = { '1': 'left', '2': 'right', '3': 'right' };
 function sideOf(sala) { return ROOM_SIDE[String(sala || '').trim()] || 'right'; }
+
+// Mapa "visto de cima" do local: a TV fica num painel de madeira e as portas dos
+// consultórios ficam ATRÁS dele. O caminho tracejado contorna o painel pelo lado certo.
+// O desenho é feito para a esquerda; para a direita as coordenadas são espelhadas.
+function PanelMap({ side }) {
+  const left = side === 'left';
+  const X = x => (left ? x : 240 - x);
+  const d = left
+    ? 'M150 138 C 100 140, 42 128, 30 98 C 22 76, 32 56, 56 50 L 68 50'
+    : 'M90 138 C 140 140, 198 128, 210 98 C 218 76, 208 56, 184 50 L 172 50';
+  const tip = left ? '62,43 74,50 62,57' : '178,43 166,50 178,57';
+  return (
+    <svg viewBox="0 0 240 170" className={s.mapSvg} aria-hidden>
+      {/* porta, atrás do painel */}
+      <rect className={s.mapDoor} x={X(89) - 19} y="31" width="38" height="36" rx="7" />
+      <text className={s.mapDoorNum} x={X(89)} y="56" textAnchor="middle">{left ? '1' : '2·3'}</text>
+      <text className={s.mapTiny} x={X(89)} y="24" textAnchor="middle">PORTA</text>
+      {/* painel de madeira com a TV (continua até o centro da tela) */}
+      <rect className={s.mapPanel} x={left ? 56 : -36} y="80" width="220" height="20" rx="5" />
+      <rect className={s.mapTv} x={X(150) - 30} y="100" width="60" height="5" rx="2" />
+      <text className={s.mapTiny} x={X(150)} y="94" textAnchor="middle">PAINEL · TV</text>
+      {/* caminho contornando o painel */}
+      <path className={s.mapPath} d={d} />
+      <polygon className={s.mapTip} points={tip} />
+      {/* você */}
+      <circle className={s.mapYouRing} cx={X(150)} cy="138" r="7" />
+      <circle className={s.mapYou} cx={X(150)} cy="138" r="6" />
+      <text className={s.mapTiny} x={X(150)} y="161" textAnchor="middle">VOCÊ ESTÁ AQUI</text>
+    </svg>
+  );
+}
+
+// Placa lateral da tela de espera: para que lado ir, mesmo antes de ser chamado
+function RoomGuide({ side }) {
+  const left = side === 'left';
+  return (
+    <aside className={`${s.guide} ${left ? s.guideLeft : s.guideRight}`}>
+      <div className={s.guideHead}>
+        <DirArrow side={side} />
+        <div className={s.guideLabel}>
+          <span className={s.guideWord}>{left ? 'Consultório' : 'Consultórios'}</span>
+          <span className={s.guideNum}>{left ? '1' : '2 e 3'}</span>
+        </div>
+      </div>
+      <PanelMap side={side} />
+      <p className={s.guideHint}>
+        A porta fica <strong>atrás deste painel</strong>.<br />Contorne pela {left ? 'esquerda' : 'direita'}.
+      </p>
+    </aside>
+  );
+}
 
 // Seta em movimento contínuo para o lado do consultório (sem texto, entendimento imediato)
 function DirArrow({ side, big }) {
@@ -304,6 +359,7 @@ function CallOverlay({ call, leaving }) {
           <span>Dirija-se ao</span>
           <strong>Consultório {call.sala}</strong>
         </div>
+        <div className={s.overlayHint}>A porta fica atrás deste painel · contorne pela {side === 'left' ? 'esquerda' : 'direita'}</div>
         <div className={s.overlayDirection}>
           <DirArrow side={side} big />
           <div className={s.overlayPath} aria-hidden>
