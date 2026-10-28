@@ -220,15 +220,21 @@ function Welcome() {
 const ROOM_SIDE = { '1': 'left', '2': 'right', '3': 'right' };
 function sideOf(sala) { return ROOM_SIDE[String(sala || '').trim()] || 'right'; }
 
-// Sinalização discreta nas bordas da tela de espera: para que lado fica cada consultório
-// (as portas ficam atrás do painel da TV; entra-se contornando o painel por cada lado)
+// Sinalização discreta nas bordas da tela de espera: uma seta que vai para o lado e faz
+// uma curva para trás, como quem contorna o painel da TV até a porta do consultório.
+// O desenho é para a esquerda; para a direita é espelhado.
 function RoomGuide({ side }) {
   const left = side === 'left';
   return (
     <aside className={`${s.guide} ${left ? s.guideLeft : s.guideRight}`}>
-      <div className={s.guideLine} aria-hidden><span className={s.guideSpark} /></div>
+      <svg viewBox="0 0 200 90" className={s.guideArrow} aria-hidden>
+        <path
+          className={s.guidePath}
+          d="M196 80 H66 C32 80 16 62 20 40 C23 24 38 14 60 17 M48 5 L61 17 L49 29"
+          pathLength="1"
+        />
+      </svg>
       <div className={s.guideWord}>{left ? 'Consultório 1' : 'Consultórios 2 e 3'}</div>
-      <div className={s.guideHint}>Porta atrás do painel,<br />pela {left ? 'esquerda' : 'direita'}</div>
     </aside>
   );
 }
