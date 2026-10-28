@@ -300,35 +300,34 @@
   width: 14vw;
   height: auto;
   overflow: visible;
-  color: var(--royal);
-  animation: guideFade 8s ease-in-out infinite;
 }
 
 .guideRight .guideArrow { transform: scaleX(-1); }
 
-/* A seta se desenha devagar no sentido do caminho, fica um tempo e recomeça */
 .guidePath {
   fill: none;
-  stroke: currentColor;
-  stroke-width: 5;
+  stroke-width: 2.2;
   stroke-linecap: round;
   stroke-linejoin: round;
-  stroke-dasharray: 1;
-  stroke-dashoffset: 1;
-  animation: guideDraw 8s cubic-bezier(.3, 0, .2, 1) infinite;
 }
 
-@keyframes guideDraw {
-  0% { stroke-dashoffset: 1; }
-  30% { stroke-dashoffset: 0; }
-  100% { stroke-dashoffset: 0; }
+/* Luz curta que desliza do centro até a ponta, a cada 7 s */
+.guideLight {
+  fill: none;
+  stroke: #8fd0f4;
+  stroke-width: 3.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 0.14 1.6;
+  stroke-dashoffset: 0.14;
+  opacity: 0.9;
+  animation: guideLight 7s cubic-bezier(.45, 0, .2, 1) infinite;
 }
 
-@keyframes guideFade {
-  0% { opacity: 0.9; }
-  88% { opacity: 0.9; }
-  96% { opacity: 0; }
-  100% { opacity: 0; }
+@keyframes guideLight {
+  0% { stroke-dashoffset: 0.14; }
+  38% { stroke-dashoffset: -1.02; }
+  100% { stroke-dashoffset: -1.02; }
 }
 
 .guideWord {

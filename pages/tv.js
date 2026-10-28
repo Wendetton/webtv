@@ -223,16 +223,23 @@ function sideOf(sala) { return ROOM_SIDE[String(sala || '').trim()] || 'right'; 
 // Sinalização discreta nas bordas da tela de espera: uma seta que vai para o lado e faz
 // uma curva para trás, como quem contorna o painel da TV até a porta do consultório.
 // O desenho é para a esquerda; para a direita é espelhado.
+const GUIDE_PATH = 'M210 82 H80 C46 82 26 66 26 44 C26 28 38 18 56 18 M46 8 L57 18 L47 29';
 function RoomGuide({ side }) {
   const left = side === 'left';
   return (
     <aside className={`${s.guide} ${left ? s.guideLeft : s.guideRight}`}>
-      <svg viewBox="0 0 200 90" className={s.guideArrow} aria-hidden>
-        <path
-          className={s.guidePath}
-          d="M196 80 H66 C32 80 16 62 20 40 C23 24 38 14 60 17 M48 5 L61 17 L49 29"
-          pathLength="1"
-        />
+      <svg viewBox="0 0 220 100" className={s.guideArrow} aria-hidden>
+        <defs>
+          <linearGradient id={`guide-grad-${side}`} gradientUnits="userSpaceOnUse" x1="210" y1="0" x2="30" y2="0">
+            <stop offset="0" stopColor="#3052ac" stopOpacity="0.15" />
+            <stop offset="0.45" stopColor="#3052ac" stopOpacity="0.75" />
+            <stop offset="1" stopColor="#60b8ec" />
+          </linearGradient>
+        </defs>
+        {/* traço fino em degradê, sempre visível */}
+        <path className={s.guidePath} stroke={`url(#guide-grad-${side})`} d={GUIDE_PATH} />
+        {/* luz que percorre o caminho de tempos em tempos */}
+        <path className={s.guideLight} d={GUIDE_PATH} pathLength="1" />
       </svg>
       <div className={s.guideWord}>{left ? 'Consultório 1' : 'Consultórios 2 e 3'}</div>
     </aside>
