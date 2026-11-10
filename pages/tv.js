@@ -228,15 +228,14 @@ function Welcome({ natal }) {
 const ROOM_SIDE = { '1': 'left', '2': 'right', '3': 'right' };
 function sideOf(sala) { return ROOM_SIDE[String(sala || '').trim()] || 'right'; }
 
-// Sinalização discreta nas bordas da tela de espera: uma seta que vai para o lado e faz
-// uma curva para trás, como quem contorna o painel da TV até a porta do consultório.
+// Sinalização discreta nas bordas da tela de espera: uma seta reta apontando para o lado do consultório.
 // O desenho é para a esquerda; para a direita é espelhado.
-const GUIDE_PATH = 'M210 82 H80 C46 82 26 66 26 44 C26 28 38 18 56 18 M46 8 L57 18 L47 29';
+const GUIDE_PATH = 'M210 15 H28 M40 4 L28 15 L40 26';
 function RoomGuide({ side }) {
   const left = side === 'left';
   return (
     <aside className={`${s.guide} ${left ? s.guideLeft : s.guideRight}`}>
-      <svg viewBox="0 0 220 100" className={s.guideArrow} aria-hidden>
+      <svg viewBox="0 0 220 30" className={s.guideArrow} aria-hidden>
         <defs>
           <linearGradient id={`guide-grad-${side}`} gradientUnits="userSpaceOnUse" x1="210" y1="0" x2="30" y2="0">
             <stop offset="0" stopColor="#3052ac" stopOpacity="0.15" />

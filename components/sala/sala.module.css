@@ -280,7 +280,7 @@
 }
 
 /* ----- Sinalização discreta nas bordas da tela de espera -----
-   Uma seta que vai para o lado e curva para trás (contornando o painel da TV) e o nome do consultório. */
+   Uma seta reta para o lado do consultório e o nome do consultório. */
 .guide {
   position: absolute;
   top: 0;
