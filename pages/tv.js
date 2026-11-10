@@ -10,7 +10,8 @@ import { db } from '../utils/firebase';
 import { collection, query, orderBy, limit, onSnapshot, doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import AmbientPlayer from '../components/sala/AmbientPlayer';
 import s from '../components/sala/sala.module.css';
-import { isNatalSeason, NATAL_FRASES, NatalDefs, NatalOrnaments, NatalSnow, NatalLights, NatalWreath, NatalCrest, Sprig, Star } from '../components/sala/Natal';
+import { NATAL_FRASES, NatalDefs, NatalOrnaments, NatalSnow, Star } from '../components/sala/Natal';
+import { DEFAULT_LAYOUT, validLayout } from '../utils/layouts';
 
 const FONTS_URL = 'https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400;1,500&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap';
 
@@ -43,7 +44,7 @@ const ESPERA = [
   { tipo: 'frase', texto: 'Obrigado pela confiança em nosso cuidado.' },
   { tipo: 'curiosidade', texto: 'Óculos de sol com proteção UV ajudam a proteger os olhos da radiação do sol.' },
 ];
-// No período de Natal, três frases de Boas Festas entram no rodízio
+// No layout de Natal, três frases de Boas Festas entram no rodízio
 const ESPERA_NATAL = [NATAL_FRASES[0], ...ESPERA.slice(0, 5), NATAL_FRASES[1], ...ESPERA.slice(5, 10), NATAL_FRASES[2], ...ESPERA.slice(10)];
 const BREATH_MS = 10000;            // mesmo ritmo da íris: 5 s inspirando, 5 s expirando
 const BREATH_SHOW_MS = BREATH_MS * 2;
@@ -196,7 +197,6 @@ function Welcome({ natal }) {
     <div className={s.welcome}>
       <div className={s.iris} aria-hidden>
         <span ref={irisRef} /><span /><span />
-        {natal === '3' && <NatalWreath />}
       </div>
       {natal && <div className={s.xmasCrown}><Star /></div>}
       <div className={s.eyebrow}>Sala de espera</div>
@@ -331,14 +331,11 @@ function CallOverlay({ call, leaving, natal }) {
       <div className={s.overlaySweep} aria-hidden />
       <div className={s.overlayEdge} aria-hidden />
       {natal && <div className={s.xmasFrame} aria-hidden />}
-      {natal === '1' && <NatalOrnaments overlay />}
-      {natal === '2' && <NatalLights overlay />}
+      {natal && <NatalOrnaments overlay />}
 
       <div className={s.overlayInner}>
         <img className={s.overlayMark} src="/logo-simbolo-cores.png" alt="" />
-        <div className={s.overlayEyebrow}>
-          {natal === '3' ? <Sprig flip /> : natal && <Star />}Paciente{natal === '3' ? <Sprig /> : natal && <Star />}
-        </div>
+        <div className={s.overlayEyebrow}>{natal && <Star />}Paciente{natal && <Star />}</div>
         <div className={s.overlayName} style={{ fontSize: `${nameSize(call.nome, 15)}vh` }}>
           <Words text={call.nome} baseDelay={350} step={120} />
         </div>
@@ -395,7 +392,8 @@ function NowPlaying({ title }) {
 /* ===== Página ===== */
 export default function TV() {
   const [demo, setDemo] = useState(false);
-  const [natal, setNatal] = useState(''); // '' = sem decoração; '1' a '4' = opção de decoração
+  const [layoutCfg, setLayoutCfg] = useState(DEFAULT_LAYOUT); // escolhido no Admin (config/main.tvLayout)
+  const [layoutUrl, setLayoutUrl] = useState('');             // /tv?layout=natal: só para ver, sem salvar
   const [demoTracks, setDemoTracks] = useState(null);
   const [history, setHistory] = useState([]);
   const [idleSeconds, setIdleSeconds] = useState(120);
@@ -421,10 +419,8 @@ export default function TV() {
     try {
       const params = new URLSearchParams(window.location.search);
       setDemo(params.has('demo'));
-      // Decoração de Natal: automática de 1º/12 a 6/1; /tv?natal=1 força, /tv?natal=0 desliga.
-      // Opções para comparar: 1 enfeites pendurados, 2 cordão de luzes, 3 guirlanda, 4 só detalhes.
-      const nv = params.get('natal');
-      setNatal(params.has('natal') ? (nv === '0' ? '' : (['2', '3', '4'].includes(nv) ? nv : '1')) : (isNatalSeason() ? '1' : ''));
+      // /tv?demo=1&layout=natal mostra um layout nesta tela sem mexer no que está salvo
+      if (params.has('layout')) setLayoutUrl(validLayout(params.get('layout')));
       // /tv?demo=1&musica=url1,url2 — testa músicas sem mexer na playlist real
       const musica = params.get('musica');
       if (params.has('demo') && musica) {
@@ -571,7 +567,7 @@ export default function TV() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [demo]);
 
-  // ---- Configurações (voz, tempo de descanso) ----
+  // ---- Configurações (voz, tempo de descanso, layout) ----
   useEffect(() => {
     const unsub = onSnapshot(doc(db, 'config', 'main'), (snap) => {
       if (!snap.exists()) return;
@@ -582,6 +578,7 @@ export default function TV() {
         restoreVolume: Number.isFinite(data.restoreVolume) ? Number(data.restoreVolume) : 60,
         leadMs: Number.isFinite(data.leadMs) ? Number(data.leadMs) : 450,
       };
+      setLayoutCfg(validLayout(data.tvLayout));
       setIdleSeconds(Number.isFinite(data.idleSeconds) ? Math.min(300, Math.max(60, Number(data.idleSeconds))) : 120);
       window.tvConfig = { ...(window.tvConfig || {}), ...cfg };
     });
@@ -619,6 +616,8 @@ export default function TV() {
     return () => { clearTimeout(first); clearTimeout(second); clearInterval(every); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [demo]);
+
+  const natal = (layoutUrl || layoutCfg) === 'natal';
 
   // ---- Derivações (mesma regra do layout anterior) ----
   const lastCallAt = history.length ? tsMs(history[0]) : null;
@@ -667,10 +666,8 @@ export default function TV() {
       </div>
 
       {natal && <NatalDefs />}
-      {natal === '1' && <NatalSnow />}
-      {natal === '1' && <NatalOrnaments />}
-      {natal === '2' && <NatalLights />}
-      {natal === '3' && <NatalCrest />}
+      {natal && <NatalSnow />}
+      {natal && <NatalOrnaments />}
 
       <header className={s.top}>
         <div className={s.brand}>

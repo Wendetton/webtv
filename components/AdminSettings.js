@@ -1,8 +1,9 @@
 // components/AdminSettings.js — Configurações que realmente valem para a TV da sala de espera
-// config/main: announceTemplate, idleSeconds, duckVolume/restoreVolume (música durante a chamada)
+// config/main: tvLayout, announceTemplate, idleSeconds, duckVolume/restoreVolume (música durante a chamada)
 import { useEffect, useState } from 'react';
 import { db } from '../utils/firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { TV_LAYOUTS, DEFAULT_LAYOUT, validLayout } from '../utils/layouts';
 
 const DEFAULT_TEMPLATE = 'Atenção: paciente {{nome}}. Dirija-se ao consultório {{salaTxt}}.';
 
@@ -35,6 +36,8 @@ function exemplo(template) {
 }
 
 export default function AdminSettings({ onSaved }) {
+  const [layout, setLayout] = useState(DEFAULT_LAYOUT);
+  const [savedLayout, setSavedLayout] = useState(DEFAULT_LAYOUT);
   const [template, setTemplate] = useState(DEFAULT_TEMPLATE);
   const [idleSeconds, setIdleSeconds] = useState(60);
   const [musicDuringCall, setMusicDuringCall] = useState(0); // % do volume normal
@@ -47,6 +50,8 @@ export default function AdminSettings({ onSaved }) {
       try {
         const snap = await getDoc(doc(db, 'config', 'main'));
         const d = snap.exists() ? snap.data() || {} : {};
+        setLayout(validLayout(d.tvLayout));
+        setSavedLayout(validLayout(d.tvLayout));
         if (d.announceTemplate) setTemplate(String(d.announceTemplate));
         if (Number.isFinite(d.idleSeconds)) setIdleSeconds(Math.min(300, Math.max(60, Number(d.idleSeconds))));
         const duck = Number.isFinite(d.duckVolume) ? Number(d.duckVolume) : 20;
@@ -64,12 +69,14 @@ export default function AdminSettings({ onSaved }) {
     setError('');
     try {
       await setDoc(doc(db, 'config', 'main'), {
+        tvLayout: validLayout(layout),
         announceTemplate: template.trim() || DEFAULT_TEMPLATE,
         idleSeconds: Number(idleSeconds),
         // A TV usa a proporção duck/restore para abaixar a música durante a voz
         duckVolume: Number(musicDuringCall),
         restoreVolume: 100,
       }, { merge: true });
+      setSavedLayout(validLayout(layout));
       setSaved(true);
       onSaved && onSaved();
       setTimeout(() => setSaved(false), 2000);
@@ -83,6 +90,59 @@ export default function AdminSettings({ onSaved }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
       {error && <div style={{ color: '#f87171', fontSize: 14 }}>{error}</div>}
+
+      {/* Layout da TV (datas comemorativas) */}
+      <section style={box}>
+        <div style={title}><span>🖼️</span> Layout da TV</div>
+        <div role="radiogroup" aria-label="Layout da TV" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {TV_LAYOUTS.map((l) => {
+            const selected = layout === l.id;
+            return (
+              <label
+                key={l.id}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 12,
+                  padding: '12px 14px',
+                  borderRadius: 10,
+                  cursor: 'pointer',
+                  background: selected ? 'rgba(59,130,246,0.12)' : 'rgba(255,255,255,0.03)',
+                  border: `2px solid ${selected ? '#3b82f6' : 'rgba(255,255,255,0.12)'}`,
+                }}
+              >
+                <input
+                  type="radio"
+                  name="tvLayout"
+                  value={l.id}
+                  checked={selected}
+                  onChange={() => setLayout(l.id)}
+                  style={{ accentColor: '#3b82f6', width: 18, height: 18, flexShrink: 0 }}
+                />
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <span style={{ display: 'block', fontSize: 15, fontWeight: 700, color: '#f8fafc' }}>{l.nome}</span>
+                  <span style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginTop: 2 }}>{l.descricao}</span>
+                </span>
+                {savedLayout === l.id && (
+                  <span style={{ fontSize: 11, fontWeight: 800, color: '#86efac', letterSpacing: '0.05em', textTransform: 'uppercase', flexShrink: 0 }}>Na TV agora</span>
+                )}
+                <a
+                  href={`/tv?demo=1&layout=${l.id}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{ fontSize: 12, fontWeight: 700, color: '#7dd3fc', flexShrink: 0 }}
+                >
+                  Ver
+                </a>
+              </label>
+            );
+          })}
+        </div>
+        <div style={hint}>
+          Escolha o layout e clique em <strong>Salvar</strong>: a TV troca sozinha em alguns segundos, sem precisar reiniciar.
+          “Ver” abre uma demonstração em outra aba, com chamadas simuladas, sem mudar nada na TV.
+        </div>
+      </section>
 
       {/* Frase falada na chamada */}
       <section style={box}>
