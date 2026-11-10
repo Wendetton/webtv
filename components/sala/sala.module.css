@@ -1033,3 +1033,55 @@
 
 .natal .overlayRule { background: linear-gradient(90deg, rgba(48, 82, 172, 0), var(--royal) 30%, var(--gold) 50%, var(--royal) 70%, rgba(96, 184, 236, 0)); }
 .natal .overlayEyebrow { display: flex; align-items: center; justify-content: center; gap: 2vh; }
+
+/* ----- Opção 2: cordão de luzes ----- */
+.xmasLights {
+  position: absolute;
+  left: 4.2vw;
+  top: 12vh;
+  width: calc(100% - 8.4vw);
+  height: auto;
+  overflow: visible;
+  z-index: 0;
+  pointer-events: none;
+  animation: fadeDown 2s 0.6s cubic-bezier(.2, .7, .2, 1) both;
+}
+
+.xmasLightsOverlay { left: 2.4vh; top: 2.4vh; width: calc(100% - 4.8vh); }
+
+.xmasBulb { animation: xmasGlow ease-in-out infinite alternate; }
+
+@keyframes xmasGlow { from { opacity: 0.45; } to { opacity: 1; } }
+
+/* ----- Opção 3: guirlanda e raminhos ----- */
+.xmasWreath {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  animation: xmasBreathe 10s ease-in-out infinite;
+}
+
+@keyframes xmasBreathe {
+  0%, 100% { transform: scale(0.86); opacity: 0.75; }
+  50% { transform: scale(1.06); opacity: 1; }
+}
+
+.xmasSprig { display: inline-block; width: 9vh; height: auto; vertical-align: middle; flex-shrink: 0; }
+.xmasSprigFlip { transform: scaleX(-1); }
+
+.xmasCrest {
+  position: absolute;
+  left: 50%;
+  top: 12vh;
+  z-index: 0;
+  display: flex;
+  align-items: center;
+  gap: 1.2vh;
+  transform: translate3d(-50%, -50%, 0);
+  pointer-events: none;
+}
+
+.xmasCrest .xmasSprig { width: 12vh; }
+.xmasCrest .xmasStar { width: 2.6vh; height: 2.6vh; }

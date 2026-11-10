@@ -117,3 +117,80 @@ export function NatalSnow() {
     </div>
   );
 }
+
+/* ===== Outras opções de decoração (para comparar): /tv?natal=2, 3 ou 4 ===== */
+
+// Opção 2 — Cordão de luzes: um fio dourado em ondas sob a linha do topo, com luzes que piscam devagar
+const LW = 1628;
+const LSEG = LW / 8;
+const LDROP = 36;
+const LIGHTS_PATH = 'M0 0' + Array.from({ length: 8 }, (_, i) => ` Q ${(i + 0.5) * LSEG} ${LDROP} ${(i + 1) * LSEG} 0`).join('');
+const BULBS = Array.from({ length: 8 }, (_, i) => [0.2, 0.5, 0.8].map((t, j) => ({
+  x: (i + t) * LSEG,
+  y: 2 * t * (1 - t) * LDROP + 5,
+  sky: (i * 3 + j) % 3 === 1,
+  dur: 3.2 + ((i * 3 + j) % 5) * 0.45,
+  delay: -((i * 7 + j * 3) % 11) * 0.4,
+}))).flat();
+
+export function NatalLights({ overlay }) {
+  return (
+    <svg viewBox={`0 0 ${LW} 60`} className={`${s.xmasLights} ${overlay ? s.xmasLightsOverlay : ''}`} aria-hidden>
+      <path d={LIGHTS_PATH} fill="none" stroke="url(#xmas-gold)" strokeWidth="1.2" />
+      {BULBS.map((b, i) => (
+        <g key={i} className={s.xmasBulb} style={{ animationDuration: `${b.dur}s`, animationDelay: `${b.delay}s` }}>
+          <circle cx={b.x} cy={b.y} r="13" fill={b.sky ? '#7cc6f0' : '#e3c98a'} opacity="0.28" />
+          <circle cx={b.x} cy={b.y} r="5.2" fill={b.sky ? '#7cc6f0' : 'url(#xmas-gold-fill)'} />
+        </g>
+      ))}
+    </svg>
+  );
+}
+
+// Opção 3 — Guirlanda: folhas douradas em volta do círculo da tela de espera
+const LEAF = 'M0 0 C 2.5 -3.4 7 -3.2 11 0 C 7 3.2 2.5 3.4 0 0 Z';
+const WREATH = Array.from({ length: 38 }, (_, k) => {
+  const a = 293 + (k * 314) / 37;                 // abre um espaço no alto do círculo
+  const rad = (a * Math.PI) / 180;
+  const up = a < 450 ? a - 90 : a + 90;           // nas duas metades as folhas apontam para cima
+  return { x: 100 * Math.cos(rad), y: 100 * Math.sin(rad), up, berry: k % 5 === 2 };
+});
+
+export function NatalWreath() {
+  return (
+    <svg viewBox="-100 -100 200 200" className={s.xmasWreath} aria-hidden>
+      {WREATH.map((l, i) => (
+        <g key={i} transform={`translate(${l.x.toFixed(2)} ${l.y.toFixed(2)})`}>
+          <path d={LEAF} transform={`rotate(${(l.up - 36).toFixed(1)})`} fill="url(#xmas-gold)" opacity="0.92" />
+          <path d={LEAF} transform={`rotate(${(l.up + 36).toFixed(1)})`} fill="url(#xmas-gold)" opacity="0.7" />
+          {l.berry && <circle r="1.6" fill="url(#xmas-gold-fill)" stroke="url(#xmas-gold)" strokeWidth="0.3" />}
+        </g>
+      ))}
+    </svg>
+  );
+}
+
+// Raminho dourado (aponta para a direita; "flip" espelha)
+export function Sprig({ flip }) {
+  return (
+    <svg viewBox="0 0 64 20" className={`${s.xmasSprig} ${flip ? s.xmasSprigFlip : ''}`} aria-hidden>
+      <path d="M2 10 H60" stroke="url(#xmas-gold)" strokeWidth="1" fill="none" strokeLinecap="round" />
+      {[4, 16, 28, 40].map(x => (
+        <g key={x} fill="url(#xmas-gold)">
+          <path d={`M${x} 10 c1 -5 6 -8 13 -8 c-1 5 -6 8 -13 8z`} />
+          <path d={`M${x + 6} 10 c1 5 6 8 13 8 c-1 -5 -6 -8 -13 -8z`} opacity="0.75" />
+        </g>
+      ))}
+      <path d="M52 10 c3 -3 7 -3 10 0 c-3 3 -7 3 -10 0z" fill="url(#xmas-gold)" />
+    </svg>
+  );
+}
+
+// Dois raminhos e uma estrela no centro da linha do topo
+export function NatalCrest() {
+  return (
+    <div className={s.xmasCrest} aria-hidden>
+      <Sprig flip /><Star /><Sprig />
+    </div>
+  );
+}

@@ -10,7 +10,7 @@ import { db } from '../utils/firebase';
 import { collection, query, orderBy, limit, onSnapshot, doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import AmbientPlayer from '../components/sala/AmbientPlayer';
 import s from '../components/sala/sala.module.css';
-import { isNatalSeason, NATAL_FRASES, NatalDefs, NatalOrnaments, NatalSnow, Star } from '../components/sala/Natal';
+import { isNatalSeason, NATAL_FRASES, NatalDefs, NatalOrnaments, NatalSnow, NatalLights, NatalWreath, NatalCrest, Sprig, Star } from '../components/sala/Natal';
 
 const FONTS_URL = 'https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400;1,500&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap';
 
@@ -196,6 +196,7 @@ function Welcome({ natal }) {
     <div className={s.welcome}>
       <div className={s.iris} aria-hidden>
         <span ref={irisRef} /><span /><span />
+        {natal === '3' && <NatalWreath />}
       </div>
       {natal && <div className={s.xmasCrown}><Star /></div>}
       <div className={s.eyebrow}>Sala de espera</div>
@@ -330,11 +331,14 @@ function CallOverlay({ call, leaving, natal }) {
       <div className={s.overlaySweep} aria-hidden />
       <div className={s.overlayEdge} aria-hidden />
       {natal && <div className={s.xmasFrame} aria-hidden />}
-      {natal && <NatalOrnaments overlay />}
+      {natal === '1' && <NatalOrnaments overlay />}
+      {natal === '2' && <NatalLights overlay />}
 
       <div className={s.overlayInner}>
         <img className={s.overlayMark} src="/logo-simbolo-cores.png" alt="" />
-        <div className={s.overlayEyebrow}>{natal && <Star />}Paciente{natal && <Star />}</div>
+        <div className={s.overlayEyebrow}>
+          {natal === '3' ? <Sprig flip /> : natal && <Star />}Paciente{natal === '3' ? <Sprig /> : natal && <Star />}
+        </div>
         <div className={s.overlayName} style={{ fontSize: `${nameSize(call.nome, 15)}vh` }}>
           <Words text={call.nome} baseDelay={350} step={120} />
         </div>
@@ -391,7 +395,7 @@ function NowPlaying({ title }) {
 /* ===== Página ===== */
 export default function TV() {
   const [demo, setDemo] = useState(false);
-  const [natal, setNatal] = useState(false);
+  const [natal, setNatal] = useState(''); // '' = sem decoração; '1' a '4' = opção de decoração
   const [demoTracks, setDemoTracks] = useState(null);
   const [history, setHistory] = useState([]);
   const [idleSeconds, setIdleSeconds] = useState(120);
@@ -417,8 +421,10 @@ export default function TV() {
     try {
       const params = new URLSearchParams(window.location.search);
       setDemo(params.has('demo'));
-      // Decoração de Natal: automática de 1º/12 a 6/1; /tv?natal=1 força, /tv?natal=0 desliga
-      setNatal(params.has('natal') ? params.get('natal') !== '0' : isNatalSeason());
+      // Decoração de Natal: automática de 1º/12 a 6/1; /tv?natal=1 força, /tv?natal=0 desliga.
+      // Opções para comparar: 1 enfeites pendurados, 2 cordão de luzes, 3 guirlanda, 4 só detalhes.
+      const nv = params.get('natal');
+      setNatal(params.has('natal') ? (nv === '0' ? '' : (['2', '3', '4'].includes(nv) ? nv : '1')) : (isNatalSeason() ? '1' : ''));
       // /tv?demo=1&musica=url1,url2 — testa músicas sem mexer na playlist real
       const musica = params.get('musica');
       if (params.has('demo') && musica) {
@@ -661,8 +667,10 @@ export default function TV() {
       </div>
 
       {natal && <NatalDefs />}
-      {natal && <NatalSnow />}
-      {natal && <NatalOrnaments />}
+      {natal === '1' && <NatalSnow />}
+      {natal === '1' && <NatalOrnaments />}
+      {natal === '2' && <NatalLights />}
+      {natal === '3' && <NatalCrest />}
 
       <header className={s.top}>
         <div className={s.brand}>
