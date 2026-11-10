@@ -10,6 +10,8 @@ import { db } from '../utils/firebase';
 import { collection, query, orderBy, limit, onSnapshot, doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import AmbientPlayer from '../components/sala/AmbientPlayer';
 import s from '../components/sala/sala.module.css';
+import { NATAL_FRASES, NatalDefs, NatalOrnaments, NatalSnow, Star } from '../components/sala/Natal';
+import { DEFAULT_LAYOUT, validLayout } from '../utils/layouts';
 
 const FONTS_URL = 'https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400;1,500&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap';
 
@@ -42,6 +44,8 @@ const ESPERA = [
   { tipo: 'frase', texto: 'Obrigado pela confiança em nosso cuidado.' },
   { tipo: 'curiosidade', texto: 'Óculos de sol com proteção UV ajudam a proteger os olhos da radiação do sol.' },
 ];
+// No layout de Natal, três frases de Boas Festas entram no rodízio
+const ESPERA_NATAL = [NATAL_FRASES[0], ...ESPERA.slice(0, 5), NATAL_FRASES[1], ...ESPERA.slice(5, 10), NATAL_FRASES[2], ...ESPERA.slice(10)];
 const BREATH_MS = 10000;            // mesmo ritmo da íris: 5 s inspirando, 5 s expirando
 const BREATH_SHOW_MS = BREATH_MS * 2;
 const CHIME_LEAD_MS = 1300;         // som suave antes da voz
@@ -155,8 +159,10 @@ function Words({ text, baseDelay = 0, step = 90 }) {
 }
 
 /* ===== Blocos visuais ===== */
-function Welcome() {
-  const [i, setI] = useState(0);
+function Welcome({ natal }) {
+  const lista = natal ? ESPERA_NATAL : ESPERA;
+  const [iRaw, setI] = useState(0);
+  const i = iRaw % lista.length;
   const mountRef = useRef(0);
   useEffect(() => {
     mountRef.current = Date.now();
@@ -164,15 +170,15 @@ function Welcome() {
     try {
       const p = new URLSearchParams(window.location.search);
       const n = Number(p.get('item'));
-      if (p.has('demo') && Number.isInteger(n) && n >= 0 && n < ESPERA.length) setI(n);
+      if (p.has('demo') && Number.isInteger(n) && n >= 0 && n < lista.length) setI(n);
     } catch {}
   }, []);
   useEffect(() => {
-    const ms = ESPERA[i].tipo === 'respirar' ? BREATH_SHOW_MS : PHRASE_MS;
-    const t = setTimeout(() => setI(x => (x + 1) % ESPERA.length), ms);
+    const ms = lista[i].tipo === 'respirar' ? BREATH_SHOW_MS : PHRASE_MS;
+    const t = setTimeout(() => setI(x => (x + 1) % lista.length), ms);
     return () => clearTimeout(t);
-  }, [i]);
-  const item = ESPERA[i];
+  }, [i, lista]);
+  const item = lista[i];
   // Sincroniza "inspire/expire" com a íris: lê em que ponto da respiração o círculo está
   const irisRef = useRef(null);
   const [breathDelay, setBreathDelay] = useState(0);
@@ -192,6 +198,7 @@ function Welcome() {
       <div className={s.iris} aria-hidden>
         <span ref={irisRef} /><span /><span />
       </div>
+      {natal && <div className={s.xmasCrown}><Star /></div>}
       <div className={s.eyebrow}>Sala de espera</div>
       <h1 className={s.welcomeTitle}>
         Seja <em>bem-vindo</em>
@@ -207,6 +214,7 @@ function Welcome() {
       ) : (
         <div key={i} className={s.phraseBox}>
           {item.tipo === 'curiosidade' && <span className={s.didYouKnow}>Você sabia?</span>}
+          {item.tipo === 'natal' && <span className={`${s.didYouKnow} ${s.xmasLabel}`}><Star />Boas Festas<Star /></span>}
           <p className={s.phrase}>{item.texto}</p>
         </div>
       )}
@@ -315,17 +323,19 @@ function Lane({ side, calls }) {
   );
 }
 
-function CallOverlay({ call, leaving }) {
+function CallOverlay({ call, leaving, natal }) {
   const side = sideOf(call.sala);
   const sideCls = side === 'left' ? s.overlayLeft : s.overlayRight;
   return (
     <div className={`${s.overlay} ${sideCls} ${leaving ? s.overlayOut : ''}`}>
       <div className={s.overlaySweep} aria-hidden />
       <div className={s.overlayEdge} aria-hidden />
+      {natal && <div className={s.xmasFrame} aria-hidden />}
+      {natal && <NatalOrnaments overlay />}
 
       <div className={s.overlayInner}>
         <img className={s.overlayMark} src="/logo-simbolo-cores.png" alt="" />
-        <div className={s.overlayEyebrow}>Paciente</div>
+        <div className={s.overlayEyebrow}>{natal && <Star />}Paciente{natal && <Star />}</div>
         <div className={s.overlayName} style={{ fontSize: `${nameSize(call.nome, 15)}vh` }}>
           <Words text={call.nome} baseDelay={350} step={120} />
         </div>
@@ -382,6 +392,8 @@ function NowPlaying({ title }) {
 /* ===== Página ===== */
 export default function TV() {
   const [demo, setDemo] = useState(false);
+  const [layoutCfg, setLayoutCfg] = useState(DEFAULT_LAYOUT); // escolhido no Admin (config/main.tvLayout)
+  const [layoutUrl, setLayoutUrl] = useState('');             // /tv?layout=natal: só para ver, sem salvar
   const [demoTracks, setDemoTracks] = useState(null);
   const [history, setHistory] = useState([]);
   const [idleSeconds, setIdleSeconds] = useState(120);
@@ -407,6 +419,8 @@ export default function TV() {
     try {
       const params = new URLSearchParams(window.location.search);
       setDemo(params.has('demo'));
+      // /tv?demo=1&layout=natal mostra um layout nesta tela sem mexer no que está salvo
+      if (params.has('layout')) setLayoutUrl(validLayout(params.get('layout')));
       // /tv?demo=1&musica=url1,url2 — testa músicas sem mexer na playlist real
       const musica = params.get('musica');
       if (params.has('demo') && musica) {
@@ -553,7 +567,7 @@ export default function TV() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [demo]);
 
-  // ---- Configurações (voz, tempo de descanso) ----
+  // ---- Configurações (voz, tempo de descanso, layout) ----
   useEffect(() => {
     const unsub = onSnapshot(doc(db, 'config', 'main'), (snap) => {
       if (!snap.exists()) return;
@@ -564,6 +578,7 @@ export default function TV() {
         restoreVolume: Number.isFinite(data.restoreVolume) ? Number(data.restoreVolume) : 60,
         leadMs: Number.isFinite(data.leadMs) ? Number(data.leadMs) : 450,
       };
+      setLayoutCfg(validLayout(data.tvLayout));
       setIdleSeconds(Number.isFinite(data.idleSeconds) ? Math.min(300, Math.max(60, Number(data.idleSeconds))) : 120);
       window.tvConfig = { ...(window.tvConfig || {}), ...cfg };
     });
@@ -602,6 +617,8 @@ export default function TV() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [demo]);
 
+  const natal = (layoutUrl || layoutCfg) === 'natal';
+
   // ---- Derivações (mesma regra do layout anterior) ----
   const lastCallAt = history.length ? tsMs(history[0]) : null;
   const idleWindowS = demo ? DEMO_IDLE_S : idleSeconds;
@@ -631,7 +648,7 @@ export default function TV() {
   const dateTxt = nowMs ? new Date(nowMs).toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' }) : '';
 
   return (
-    <div className={s.screen}>
+    <div className={`${s.screen} ${natal ? s.natal : ''}`}>
       <Head>
         <title>Oftalmocenter · Sala de espera</title>
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
@@ -648,6 +665,10 @@ export default function TV() {
         <div className={s.vignette} />
       </div>
 
+      {natal && <NatalDefs />}
+      {natal && <NatalSnow />}
+      {natal && <NatalOrnaments />}
+
       <header className={s.top}>
         <div className={s.brand}>
           <img className={s.brandMark} src="/logo-simbolo-cores.png" alt="" />
@@ -661,7 +682,7 @@ export default function TV() {
       <main className={s.main}>
         {isIdle ? (
           <section key="idle" className={s.stage}>
-            <Welcome />
+            <Welcome natal={natal} />
           </section>
         ) : (
           <section className={s.lanes}>
@@ -680,10 +701,14 @@ export default function TV() {
 
       <footer className={s.bottom}>
         <NowPlaying title={trackTitle} />
-        <div className={s.tagline}>Agradecemos a sua confiança</div>
+        {natal ? (
+          <div className={`${s.tagline} ${s.xmasTagline}`}>Agradecemos a sua confiança <Star /> <b>Boas Festas</b></div>
+        ) : (
+          <div className={s.tagline}>Agradecemos a sua confiança</div>
+        )}
       </footer>
 
-      {overlay && <CallOverlay key={overlay.key} call={overlay} leaving={overlayLeaving} />}
+      {overlay && <CallOverlay key={overlay.key} call={overlay} leaving={overlayLeaving} natal={natal} />}
 
       <AmbientPlayer onTrackChange={setTrackTitle} demoTracks={demoTracks} />
 

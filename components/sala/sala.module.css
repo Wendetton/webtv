@@ -916,3 +916,160 @@
 /* ===== Animações compartilhadas ===== */
 @keyframes fadeUp { from { opacity: 0; transform: translate3d(0, 2vh, 0); } to { opacity: 1; transform: none; } }
 @keyframes fadeDown { from { opacity: 0; transform: translate3d(0, -2vh, 0); } to { opacity: 1; transform: none; } }
+
+/* ===== Decoração de Natal (components/sala/Natal.js) =====
+   Layout "Natal", escolhido no Admin: dourado fino sobre o tema da marca. */
+.natal {
+  --gold: #b48a3c;
+  --gold-text: #94701f;
+  --gold-line: rgba(180, 138, 60, 0.45);
+}
+
+/* Linha do topo e do rodapé ganham um fio dourado */
+.natal .top { border-bottom-color: transparent; }
+.natal .top::after {
+  content: '';
+  position: absolute;
+  left: 0; right: 0; bottom: -1px;
+  height: 1px;
+  background: linear-gradient(90deg, var(--line), var(--gold-line) 22%, var(--gold) 50%, var(--gold-line) 78%, var(--line));
+}
+
+.xmasTop {
+  position: absolute;
+  left: 0; right: 0;
+  top: 12vh;
+  height: 30vh;
+  overflow: hidden;   /* os enfeites descem de trás da linha do topo */
+  z-index: 0;
+  pointer-events: none;
+}
+
+.xmasTopOverlay { top: 0; }
+
+.xmasDrop {
+  position: absolute;
+  top: 0;
+  animation: xmasDropIn 2.6s cubic-bezier(.2, .9, .25, 1) both;
+  will-change: transform;
+}
+
+/* Desce, passa um pouco do ponto e assenta */
+@keyframes xmasDropIn {
+  0% { transform: translate3d(0, -32vh, 0); opacity: 0; }
+  30% { opacity: 1; }
+  72% { transform: translate3d(0, 0.5vh, 0); }
+  100% { transform: none; opacity: 1; }
+}
+
+.xmasHang {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transform-origin: 50% 0;
+  animation: xmasSway ease-in-out infinite alternate;
+  will-change: transform;
+}
+
+.xmasHang svg { display: block; overflow: visible; filter: drop-shadow(0 0.4vh 0.6vh rgba(148, 112, 31, 0.18)); }
+
+.xmasThread {
+  display: block;
+  width: 1px;
+  background: linear-gradient(180deg, var(--gold-line), var(--gold));
+}
+
+@keyframes xmasSway {
+  from { transform: rotate(calc(var(--sway, 1.6deg) * -1)); }
+  to { transform: rotate(var(--sway, 1.6deg)); }
+}
+
+/* Reflexo da esfera: clareia e escurece devagar */
+.xmasSheen { opacity: 0.45; animation: xmasSheen 6s ease-in-out infinite alternate; }
+@keyframes xmasSheen { from { opacity: 0.3; } to { opacity: 0.95; } }
+
+/* Brilho: fica apagado quase o tempo todo e acende por um instante */
+.xmasGlint {
+  opacity: 0;
+  transform: scale(0.2);
+  animation: xmasGlint 9s ease-in-out infinite;
+}
+
+@keyframes xmasGlint {
+  0%, 84%, 100% { opacity: 0; transform: scale(0.2) rotate(0deg); }
+  91% { opacity: 1; transform: scale(1) rotate(45deg); }
+  96% { opacity: 0; transform: scale(0.5) rotate(90deg); }
+}
+
+/* Estrelas pendentes cintilam */
+.xmasTwinkle {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: xmasTwinkle 4.5s ease-in-out infinite;
+}
+
+.xmasSnow {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.xmasFlake {
+  position: absolute;
+  top: -3vh;
+  border-radius: 50%;
+  background: radial-gradient(circle, #d9b866 0%, #dcbf74 35%, rgba(220, 191, 116, 0) 70%);
+  opacity: 0;
+  animation: xmasFall linear infinite;
+  will-change: transform;
+}
+
+@keyframes xmasFall {
+  0% { transform: translate3d(0, 0, 0); opacity: 0; }
+  8% { opacity: 0.75; }
+  50% { transform: translate3d(1.6vw, 52vh, 0); opacity: 0.6; }
+  92% { opacity: 0.5; }
+  100% { transform: translate3d(-0.8vw, 106vh, 0); opacity: 0; }
+}
+
+.xmasStar { display: inline-block; width: 1.9vh; height: 1.9vh; vertical-align: middle; flex-shrink: 0; }
+
+/* Íris: o anel de fora fica dourado */
+.natal .iris span:first-child { border-color: rgba(180, 138, 60, 0.55); }
+
+/* Estrela acima do "Sala de espera" */
+.xmasCrown { display: flex; justify-content: center; margin-bottom: 2vh; }
+.xmasCrown .xmasStar { width: 3.2vh; height: 3.2vh; animation: xmasTwinkle 5s ease-in-out infinite; }
+
+@keyframes xmasTwinkle {
+  0%, 100% { transform: scale(0.85); opacity: 0.7; }
+  50% { transform: scale(1.08); opacity: 1; }
+}
+
+/* "Boas Festas" acima das frases de Natal */
+.xmasLabel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1.4vh;
+  color: var(--gold-text);
+}
+
+/* Rodapé */
+.xmasTagline { display: inline-flex; align-items: center; gap: 1.4vh; }
+.xmasTagline b { font-weight: 500; color: var(--gold-text); }
+.natal .bottom { border-top-color: var(--gold-line); }
+
+/* Chamada em tela cheia: moldura fina e fio dourado sob o nome */
+.xmasFrame {
+  position: absolute;
+  inset: 2.4vh;
+  border: 1px solid var(--gold-line);
+  border-radius: 1.6vh;
+  pointer-events: none;
+}
+
+.natal .overlayRule { background: linear-gradient(90deg, rgba(48, 82, 172, 0), var(--royal) 30%, var(--gold) 50%, var(--royal) 70%, rgba(96, 184, 236, 0)); }
+.natal .overlayEyebrow { display: flex; align-items: center; justify-content: center; gap: 2vh; }
